@@ -40,12 +40,7 @@ class SpotifyAPIClient:
             "client_id": self.client_id,
             "client_secret": self.client_secret,
         }
-        print("URL:", url)
-        print("Headers:", headers)
-        print("Data:", data)
         response = self.session.post(url, headers=headers, data=data)
-        print("Response Status:", response.status_code)
-        print("Response Body:", response.text)
         if response.status_code != 200:
             logger.error(f"Failed to retrieve token: {response.status_code} - {response.text}")
         response.raise_for_status()  # This will raise an exception for non-2xx responses
@@ -227,6 +222,7 @@ class Ingestor:
         self.data_parser = data_parser
         self.data_saver = data_saver
 
+    # Execute the data ingestion process
     def execute(self, search_query: str, search_type: str, limit: Optional[int] = 20) -> None:
         logger.info(f"Starting data ingestion for: {search_type}, Query: {search_query}, Limit: {limit}")
         try:
@@ -246,11 +242,12 @@ class Ingestor:
         except Exception as e:
             logger.error(f"An error occurred during the data ingestion process: {e}")
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
+    # Initialize the API client, data parser, data saver, and ingestor
     client_id = os.getenv("client_id")
     client_secret = os.getenv("client_secret")
     api_client = SpotifyAPIClient(API_BASE_URL, client_id, client_secret)
-    data_parser = DataParser()  # Assuming you also have a DataParser class
+    data_parser = DataParser() 
     data_saver = DataSaver(TABLE_NAME, TABLE_PATH, AWS_BUCKET_NAME, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
     ingestor = Ingestor(api_client, data_parser, data_saver)
 

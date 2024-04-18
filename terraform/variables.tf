@@ -1,14 +1,14 @@
 variable "AWS_ACCESS_KEY" {
-    description = "AWS Access Key."
+    description = ""
     type = string
 }
 
 variable "AWS_SECRET_KEY" {
-    description = "AWS Secret Key."
+    description = ""
     type = string
 }
 
 variable "AWS_REGION" {
-    description = "AWS Region."
+    description = "us-east-2"
     type = string
 }
