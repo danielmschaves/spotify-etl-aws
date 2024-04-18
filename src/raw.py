@@ -4,37 +4,54 @@ import requests
 import os
 import json
 import boto3
-from datetime import datetime
 from loguru import logger
-from dotenv import load_dotenv
+from botocore.exceptions import ClientError
 
 # Load environment variables
 load_dotenv()
 
-# Configuration
-API_BASE_URL = "https://api.spotify.com/v1/"
-DATASET_NAME = "default_cards"
-TABLE_NAME = "cards"
+# Environmental configuration
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.spotify.com/v1/")
+TABLE_NAME = os.getenv("TABLE_NAME", "spotify_data")
 TABLE_PATH = "data/raw/"
 AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-ACCES_TOKEN = ""
+client_id = os.getenv("client_id")
+client_secret = os.getenv("client_secret")
 
 class SpotifyAPIClient:
     """
-    Class for interacting with the Spotify API.
+    Class for interacting with the Spotify API, providing methods to search for different entities.
     """
 
-    def __init__(self, base_url, access_token: str) -> None:
+    def __init__(self, base_url: str, client_id: str, client_secret: str) -> None:
         self.base_url = base_url
-        self.access_token = access_token
-        self.headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json"
-        }
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.session = requests.Session()
+        self.access_token = self.refresh_access_token()
 
-    def _make_request(self, endpoint: str, params: Optional[Dict[str, str]] = None) -> Optional[Union[Dict, List[Dict]]]:
+    def refresh_access_token(self) -> str:
+        url = "https://accounts.spotify.com/api/token"
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+        }
+        print("URL:", url)
+        print("Headers:", headers)
+        print("Data:", data)
+        response = self.session.post(url, headers=headers, data=data)
+        print("Response Status:", response.status_code)
+        print("Response Body:", response.text)
+        if response.status_code != 200:
+            logger.error(f"Failed to retrieve token: {response.status_code} - {response.text}")
+        response.raise_for_status()  # This will raise an exception for non-2xx responses
+        return response.json()['access_token']
+
+    def _make_request(self, endpoint: str, params: Optional[Dict[str, str]] = None) -> Optional[Dict]:
         """
         Makes an API request to the specified endpoint.
 
@@ -43,147 +60,87 @@ class SpotifyAPIClient:
             params (Optional[Dict[str, str]]): Optional parameters for the request.
 
         Returns:
-            Optional[Union[Dict, List[Dict]]]: The response data, or None if request fails.
+            Optional[Dict]: The response data, or None if the request fails.
         """
+        url = f"{self.base_url}{endpoint}"
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json"
+        }
         try:
-            url = f"{self.base_url}{endpoint}"
-            response = requests.get(url, headers=self.headers, params=params)
+            response = self.session.get(url, headers=headers, params=params)
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP error occurred: {e.response.status_code} {e.response.reason} for URL {url}")
+            if e.response.status_code == 401:  # Unauthorized access, refresh token
+                self.access_token = self.refresh_access_token()  # Attempt to refresh access token
+                return self._make_request(endpoint, params)  # Retry the request
+        except requests.exceptions.ConnectionError:
+            logger.error("Connection error occurred")
+        except requests.exceptions.Timeout:
+            logger.error("Timeout occurred")
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error making request to {endpoint}: {e}")
-            return None
+            logger.error(f"Request exception: {e}")
+        return None
 
-    def search_tracks(self, query: str, limit: Optional[int] = None) -> Optional[List[Dict]]:
+    def search(self, query: str, search_type: str, limit: Optional[int] = 20) -> Optional[List[Dict]]:
         """
-        Searches for tracks based on a query.
+        Generic search function for different Spotify entities like tracks and artists.
 
         Args:
             query (str): The search query.
-            limit (Optional[int]): Limit the number of tracks to fetch.
+            search_type (str): Type of search (e.g., 'track', 'artist').
+            limit (Optional[int]): Limit the number of items to return.
 
         Returns:
-            Optional[List[Dict]]: List of track data, or None if the request fails.
+            Optional[List[Dict]]: List of entities data, or None if the request fails.
         """
-        try:
-            params = {"q": query, "type": "track", "limit": limit} if limit else {"q": query, "type": "track"}
-            endpoint = "search"
-            response = self._make_request(endpoint, params=params)
-
-            if response:
-                logger.info("Search tracks request successful")
-                return response.get("tracks", {}).get("items", [])
-            else:
-                logger.error("Failed to retrieve tracks")
-                return None
-        except Exception as e:
-            logger.error(f"Error searching tracks: {e}")
-            return None
-
-    def search_artists(self, query: str, limit: Optional[int] = None) -> Optional[List[Dict]]:
-        """
-        Searches for artists based on a query.
-
-        Args:
-            query (str): The search query.
-            limit (Optional[int]): Limit the number of artists to fetch.
-
-        Returns:
-            Optional[List[Dict]]: List of artist data, or None if the request fails.
-        """
-        try:
-            params = {"q": query, "type": "artist", "limit": limit} if limit else {"q": query, "type": "artist"}
-            endpoint = "search"
-            response = self._make_request(endpoint, params=params)
-
-            if response:
-                logger.info("Search artists request successful")
-                return response.get("artists", {}).get("items", [])
-            else:
-                logger.error("Failed to retrieve artists")
-                return None
-        except Exception as e:
-            logger.error(f"Error searching artists: {e}")
-            return None
+        params = {"q": query, "type": search_type, "limit": limit}
+        endpoint = "search"
+        response = self._make_request(endpoint, params=params)
+        if response:
+            items = response.get(search_type + 's', {}).get("items", [])
+            logger.info(f"Search for {search_type}s '{query}' returned {len(items)} items.")
+            return items
+        else:
+            logger.error(f"Failed to retrieve {search_type}s for query '{query}'")
+        return None
     
-    def get_artist_albums(self, artist_id: str, limit: Optional[int] = None) -> Optional[List[dict]]:
-        """
-        Fetches albums from a Spotify artist.
-
-        Args:
-            artist_id (str): The ID of the artist.
-            limit (int, optional): Limit the number of albums to fetch.
-
-        Returns:
-            Optional[List[dict]]: List of album data, or None if the request fails.
-        """
-        try:
-            params = {"limit": limit} if limit else None
-            endpoint = f"artists/{artist_id}/albums"
-            response = self._make_request(endpoint, params=params)
-            if response:
-                logger.info(f"Fetched albums for artist {artist_id}")
-                return response.get("items", [])
-            else:
-                logger.error(f"Failed to fetch albums for artist {artist_id}")
-                return None
-        except Exception as e:
-            logger.error(f"Error fetching albums for artist {artist_id}: {e}")
-            return None    
-
-    def get_track_audio_features(self, track_id: str) -> Optional[dict]:
-        """
-        Fetches audio features for a Spotify track.
-
-        Args:
-            track_id (str): The ID of the track.
-
-        Returns:
-            Optional[dict]: Audio features data, or None if the request fails.
-        """
-        try:
-            endpoint = f"audio-features/{track_id}"
-            response = self._make_request(endpoint)
-            if response:
-                logger.info(f"Fetched audio features for track {track_id}")
-                return response
-            else:
-                logger.error(f"Failed to fetch audio features for track {track_id}")
-                return None
-        except Exception as e:
-            logger.error(f"Error fetching audio features for track {track_id}: {e}")
-            return None    
-
 class DataParser:
     """
-    Class for parsing data.
+    Class for parsing data from JSON.
     """
-    def parse_json_data(data: requests.Response) -> Optional[List[Dict]]:
+
+    @staticmethod
+    def parse_json_data(json_data: str) -> Optional[List[Dict]]:
         """
-        Parses JSON data.
+        Parses JSON data from a JSON string.
 
         Args:
-            data (requests.Response): The JSON data.
+            json_data (str): The JSON data as a string.
 
         Returns:
-            Optional[List[Dict]]: The parsed data, or None if parsing fails.
+            Optional[List[Dict]]: The parsed data as a list of dictionaries, or None if parsing fails.
         """
         try:
-            parsed_data = data.json()
+            parsed_data = json.loads(json_data)
             return parsed_data
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e.msg}")
         except Exception as e:
-            # Log the error if parsing fails
             logger.error(f"Error parsing JSON data: {e}")
-            return None
-        
+        return None
+
 class DataSaver:
     """
-    Class for saving data locally or to an AWS S3 bucket.
+    Class for saving data locally or to an AWS S3 bucket, ensuring data integrity and handling errors gracefully.
     """
 
     def __init__(
         self,
         table_name: str,
+        table_path: str,
         bucket_name: Optional[str] = None,
         access_key_id: Optional[str] = None,
         secret_access_key: Optional[str] = None,
@@ -193,11 +150,13 @@ class DataSaver:
 
         Args:
             table_name (str): Name of the table.
+            table_path (str): Local path where the data files will be stored.
             bucket_name (str, optional): Name of the AWS S3 bucket.
             access_key_id (str, optional): AWS access key ID.
             secret_access_key (str, optional): AWS secret access key.
         """
         self.table_name = table_name
+        self.table_path = table_path
         self.bucket_name = bucket_name
         if bucket_name:
             self.s3_client = boto3.client(
@@ -206,48 +165,53 @@ class DataSaver:
                 aws_secret_access_key=secret_access_key,
             )
 
-    def save_local(self, data: List[Dict]) -> None:
+    def save_local(self, data: List[Dict], file_name: str) -> None:
         """
-        Save parsed data to a local file.
+        Save parsed data to a local file system, handling any file system errors that might occur.
 
         Args:
             data (List[Dict]): List of parsed data.
+            file_name (str): Name of the file to save the data in.
 
         Returns:
-            None
+            None: Indicates successful save or logs an error.
         """
+        file_path = os.path.join(self.table_path, file_name)
         try:
-            logger.info("Saving data locally")
-            file_path = os.path.join(TABLE_PATH, f"{self.table_name}.json")
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, "w") as file:
                 json.dump(data, file, indent=4)
             logger.success(f"Data saved locally to {file_path}")
-        except Exception as e:
-            logger.error(f"An error occurred while saving data locally: {e}")
+        except IOError as e:
+            logger.error(f"Failed to save data locally: {e}")
 
-    def save_s3(self, data: List[Dict]) -> None:
+    def save_s3(self, data: List[Dict], file_name: str) -> None:
         """
-        Save parsed data to an AWS S3 bucket.
+        Save parsed data to an AWS S3 bucket, handling any AWS client errors that might occur.
 
         Args:
             data (List[Dict]): List of parsed data.
+            file_name (str): Name of the file to save the data in.
 
         Returns:
-            None
+            None: Indicates successful save or logs an error.
         """
+        if not self.bucket_name:
+            logger.error("No S3 bucket configured for saving data.")
+            return
+
+        json_bytes = json.dumps(data, indent=4).encode("utf-8")
+        key = file_name
         try:
-            logger.info("Saving data to S3 bucket")
-            json_bytes = json.dumps(data, indent=4).encode("utf-8")
-            key = f"{self.table_name}.json"
             self.s3_client.put_object(Body=json_bytes, Bucket=self.bucket_name, Key=key)
-            logger.success(f"Data saved successfully to S3 bucket: {self.bucket_name}")
-        except Exception as e:
-            logger.error(f"An error occurred while saving data to S3 bucket: {e}")
+            logger.success(f"Data saved successfully to S3 bucket: {self.bucket_name}, Key: {key}")
+        except ClientError as e:
+            logger.error(f"Failed to save data to S3: {e.response['Error']['Message']}")
 
 class Ingestor:
     """
-    Class for ingesting data from the Spotify API, parsing it, and saving it.
+    Class for ingesting data from the Spotify API, parsing it, and saving it. This class coordinates the
+    interaction between the API client, data parser, and data saver.
     """
 
     def __init__(self, api_client, data_parser, data_saver):
@@ -263,49 +227,35 @@ class Ingestor:
         self.data_parser = data_parser
         self.data_saver = data_saver
 
-    def execute(self, query: str, limit: Optional[int] = None) -> None:
-        """
-        Executes the data ingestion process by fetching, parsing, and saving data from the Spotify API.
-
-        Args:
-            query (str): The search query to fetch data from the Spotify API.
-            limit (int, optional): Limit the number of items to fetch.
-
-        Returns:
-            None
-        """
+    def execute(self, search_query: str, search_type: str, limit: Optional[int] = 20) -> None:
+        logger.info(f"Starting data ingestion for: {search_type}, Query: {search_query}, Limit: {limit}")
         try:
-            logger.info("Starting ingestion process")
-            # Fetch data from the Spotify API
-            tracks_data = self.api_client.search_tracks(query, limit)
-
-            if tracks_data:
-                # Parse fetched data
-                parsed_data = self.data_parser.parse_tracks(tracks_data)
-
+            fetched_data = self.api_client.search(search_query, search_type, limit)
+            if fetched_data:
+                parsed_data = self.data_parser.parse_json_data(json.dumps(fetched_data))
                 if parsed_data:
-                    # Save parsed data
-                    self.data_saver.save_local(parsed_data)
-                    self.data_saver.save_s3(parsed_data)
-                    logger.success("Ingestion completed!")
+                    file_name = f"{search_query}_{search_type}_{limit}.json"
+                    self.data_saver.save_local(parsed_data, file_name)
+                    if self.data_saver.bucket_name:
+                        self.data_saver.save_s3(parsed_data, file_name)
+                    logger.success("Data ingestion process completed successfully.")
+                else:
+                    logger.warning("Parsing fetched data resulted in no output.")
+            else:
+                logger.warning("No data fetched from the Spotify API.")
         except Exception as e:
-            logger.error(f"Error executing data ingestion process: {e}")
+            logger.error(f"An error occurred during the data ingestion process: {e}")
 
 if __name__ == "__main__":
-    # Initialize the necessary components
-    api_client = SpotifyAPIClient(API_BASE_URL, ACCES_TOKEN)
-    data_parser = DataParser()
-    data_saver = DataSaver(
-        TABLE_NAME, TABLE_PATH, AWS_BUCKET_NAME, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY
-    )
+    client_id = os.getenv("client_id")
+    client_secret = os.getenv("client_secret")
+    api_client = SpotifyAPIClient(API_BASE_URL, client_id, client_secret)
+    data_parser = DataParser()  # Assuming you also have a DataParser class
+    data_saver = DataSaver(TABLE_NAME, TABLE_PATH, AWS_BUCKET_NAME, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
     ingestor = Ingestor(api_client, data_parser, data_saver)
 
-    # User input for dynamic operation
-    print("Welcome to the Spotify Data Ingestor!")
-    search_type = input("Enter the type of data to search (track, artist, album): ").strip().lower()
-    query = input(f"Enter a query to search {search_type}s on Spotify: ").strip()
-    limit = input("Enter the maximum number of items to fetch (press Enter for default limit, 20): ").strip()
-    limit = int(limit) if limit.isdigit() else 20
-
-    # Execute the ingestion process
-    ingestor.execute(query, search_type, limit)
+    # Example usage
+    query = input("Enter a query to search on Spotify (e.g., 'Radiohead'): ")
+    type = input("Enter the type to search (e.g., 'artist', 'track', 'album'): ")
+    limit = int(input("Enter the maximum number of items to fetch (default 20): ") or "20")
+    ingestor.execute(query, type, limit)
