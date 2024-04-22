@@ -6,6 +6,7 @@ import json
 import boto3
 from loguru import logger
 from botocore.exceptions import ClientError
+from requests.auth import HTTPBasicAuth
 
 # Load environment variables
 load_dotenv()
@@ -35,15 +36,12 @@ class SpotifyAPIClient:
     def refresh_access_token(self) -> str:
         url = "https://accounts.spotify.com/api/token"
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        data = {
-            "grant_type": "client_credentials",
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-        }
-        response = self.session.post(url, headers=headers, data=data)
+        data = {"grant_type": "client_credentials"}
+
+        response = self.session.post(url, headers=headers, data=data, auth=HTTPBasicAuth(self.client_id, self.client_secret))
         if response.status_code != 200:
             logger.error(f"Failed to retrieve token: {response.status_code} - {response.text}")
-        response.raise_for_status()  # This will raise an exception for non-2xx responses
+        response.raise_for_status()
         return response.json()['access_token']
 
     def _make_request(self, endpoint: str, params: Optional[Dict[str, str]] = None) -> Optional[Dict]:
@@ -79,27 +77,35 @@ class SpotifyAPIClient:
             logger.error(f"Request exception: {e}")
         return None
 
-    def search(self, query: str, search_type: str, genre: Optional[str] = None, limit: Optional[int] = 20) -> Optional[List[Dict]]:
+    def search(self, query: str, search_type: str, genre: Optional[str] = None, limit: Optional[int] = 20, playlist_id: Optional[str] = None) -> Optional[List[Dict]]:
         """
-        Generic search function for different Spotify entities like tracks and artists.
-        Adds the ability to filter by genre.
+        Generic search function for different Spotify entities like tracks, artists, playlists.
+        Adds the ability to filter by genre and directly fetch playlists.
 
         Args:
             query (str): The search query.
-            search_type (str): Type of search (e.g., 'track', 'artist').
+            search_type (str): Type of search (e.g., 'track', 'artist', 'playlist').
             genre (Optional[str]): Genre to filter the search results (e.g., 'rock', 'jazz').
             limit (Optional[int]): Limit the number of items to return.
+            playlist_id (Optional[str]): Specific ID of the playlist to fetch directly.
 
         Returns:
             Optional[List[Dict]]: List of entities data, or None if the request fails.
         """
-        params = {"q": query, "type": search_type, "limit": limit}
-        if genre:
-            params["q"] += f" genre:{genre}"  # Append genre to the search query if provided
-        endpoint = "search"
-        response = self._make_request(endpoint, params=params)
+        if playlist_id:
+            endpoint = f"playlists/{playlist_id}"
+        else:
+            query_string = f"{query} genre:{genre}" if genre else query
+            params = {"q": query_string, "type": search_type, "limit": limit}
+            endpoint = "search"
+        
+        response = self._make_request(endpoint, params if not playlist_id else None)
         if response:
-            items = response.get(search_type + 's', {}).get("items", [])
+            if playlist_id:
+                items = [response]  # Wrap the playlist response in a list
+            else:
+                items = response.get(search_type + 's', {}).get("items", [])
+            
             logger.info(f"Search for {search_type}s '{query}' with genre '{genre}' returned {len(items)} items.")
             return items
         else:
@@ -227,14 +233,17 @@ class Ingestor:
         self.data_saver = data_saver
 
     # Execute the data ingestion process
-    def execute(self, search_query: str, search_type: str, limit: Optional[int] = 20) -> None:
-        logger.info(f"Starting data ingestion for: {search_type}, Query: {search_query}, Limit: {limit}")
+    def execute(self, search_query: str, search_type: str, genre: Optional[str] = None, limit: Optional[int] = 20, playlist_id: Optional[str] = None):
+        logger.info(f"Starting data ingestion for: {search_type}, Query: {search_query}, Genre: {genre}, Limit: {limit}, Playlist ID: {playlist_id}")
         try:
-            fetched_data = self.api_client.search(search_query, search_type, limit)
+            fetched_data = self.api_client.search(search_query, search_type, genre, limit, playlist_id)
             if fetched_data:
                 parsed_data = self.data_parser.parse_json_data(json.dumps(fetched_data))
                 if parsed_data:
-                    file_name = f"{search_query}_{search_type}_{limit}.json"
+                    # Sanitize playlist ID for file naming
+                    sanitized_playlist_id = playlist_id.replace('?', '_').replace(':', '_') if playlist_id else None
+                    file_name = f"playlist_{sanitized_playlist_id}_{limit}.json" if playlist_id else f"{search_query.replace(' ', '_')}_{search_type}_{genre}_{limit}.json"
+                    
                     self.data_saver.save_local(parsed_data, file_name)
                     if self.data_saver.bucket_name:
                         self.data_saver.save_s3(parsed_data, file_name)
@@ -246,18 +255,20 @@ class Ingestor:
         except Exception as e:
             logger.error(f"An error occurred during the data ingestion process: {e}")
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     # Initialize the API client, data parser, data saver, and ingestor
     client_id = os.getenv("client_id")
     client_secret = os.getenv("client_secret")
     api_client = SpotifyAPIClient(API_BASE_URL, client_id, client_secret)
-    data_parser = DataParser() 
+    data_parser = DataParser()
     data_saver = DataSaver(TABLE_NAME, TABLE_PATH, AWS_BUCKET_NAME, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
     ingestor = Ingestor(api_client, data_parser, data_saver)
 
-    # Example usage 
+    # Example usage
     query = input("Enter a query to search on Spotify (e.g., 'Radiohead'): ")
     type = input("Enter the type to search (e.g., 'artist', 'track', 'album'): ")
+    genre = input("Enter the genre (or leave blank for no specific genre): ")
     limit = int(input("Enter the maximum number of items to fetch (default 20): ") or "20")
-    ingestor.execute(query, type, limit)
+    playlist_id = input("Enter a playlist ID (or leave blank for general search): ")
+    ingestor.execute(query, type, genre if genre else None, limit, playlist_id if playlist_id else None)
     

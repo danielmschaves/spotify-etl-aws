@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import List
 
 class Artist(BaseModel):
     id: str = Field(..., description="The Spotify ID for the artist")
