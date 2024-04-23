@@ -3,6 +3,8 @@ import os
 import sys
 from airflow.decorators import dag, task
 from dotenv import load_dotenv
+import logging
+
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from raw import SpotifyAPIClient, DataParser, DataSaver
@@ -21,6 +23,7 @@ AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 QUERY = "genre:'hip hop'"  # Search query including genre
 SEARCH_TYPE = "artist"  # Search type
+PLAYLIST_ID = "37i9dQZEVXbMDoHDwVN2tF"  # Spotify Playlist ID
 
 default_args = {
     'owner': 'airflow',
@@ -33,27 +36,36 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-@dag(default_args=default_args, schedule_interval='@daily', catchup=False, tags=['spotify_etl'])
+logger = logging.getLogger(__name__)
+
+@dag(default_args=default_args, schedule_interval='@daily', catchup=False, tags=['spotify_raw_etl'])
 def spotify_etl_dag():
     """
     Airflow DAG to ingest data from Spotify API, parse it, and save it both locally and to S3.
     """
     @task
     def fetch_and_save_spotify_data():
-        api_client = SpotifyAPIClient(API_BASE_URL, CLIENT_ID, CLIENT_SECRET)
-        data_parser = DataParser()
-        data_saver = DataSaver(TABLE_NAME, TABLE_PATH, AWS_BUCKET_NAME, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
+        try:
+            api_client = SpotifyAPIClient(API_BASE_URL, CLIENT_ID, CLIENT_SECRET)
+            data_parser = DataParser()
+            data_saver = DataSaver(TABLE_NAME, TABLE_PATH, AWS_BUCKET_NAME, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
 
-        # Fetch data from Spotify API
-        fetched_data = api_client.search(QUERY, SEARCH_TYPE)
-        if fetched_data:
-            # Parse data
-            parsed_data = data_parser.parse_json_data(fetched_data)
-            # Define a file name for saving
-            file_name = f"{QUERY.replace(' ', '_')}_{SEARCH_TYPE}.json"
-            # Save data locally and to S3
-            data_saver.save_local(parsed_data, file_name)
-            data_saver.save_s3(parsed_data, file_name)
+           # Fetch playlist data from Spotify API
+            logger.info("START FETCHING PLAYLIST DATA")
+            fetched_data = api_client.search(query="", search_type="playlist", playlist_id=PLAYLIST_ID)
+            if fetched_data:
+                # Parse data
+                logger.info("START PARSING DATA")
+                parsed_data = data_parser.parse_json_data(fetched_data)
+                # Define a file name for saving
+                file_name = f"playlist_{PLAYLIST_ID}.json"
+                # Save data locally and to S3
+                logger.info("START SAVING DATA LOCALLY")
+                data_saver.save_local(parsed_data, file_name)
+                logger.info("START SAVING DATA TO S3")
+                data_saver.save_s3(parsed_data, file_name)
+        except Exception as e:
+                logger.error(f"An error occured: {e}")
 
     # Setup task
     fetch_and_save_spotify_data_task = fetch_and_save_spotify_data()
