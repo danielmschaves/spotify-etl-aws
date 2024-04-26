@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl, Field, validator
+from pydantic import BaseModel, Field, HttpUrl
 from typing import List, Optional, Dict
 
 class Image(BaseModel):
@@ -12,60 +12,56 @@ class Artist(BaseModel):
     popularity: Optional[int]
     followers: Optional[int]
     genres: List[str] = []
-    image_url: Optional[HttpUrl]
-
+    
 class Album(BaseModel):
     id: str
     name: str
     release_date: str
     total_tracks: int
     album_type: str
-    artist_ids: List[str]
-    cover_image_url: Optional[HttpUrl]
-
+ 
 class Track(BaseModel):
     id: str
     name: str
-    album_id: Optional[str]
+    album: Album  # Nested Album model
     artist_ids: List[str]
     duration_ms: int
     popularity: Optional[int]
     explicit: Optional[bool]
     track_number: Optional[int]
 
-    @validator('album_id', pre=True, always=True)
-    def extract_album_id(cls, v, values, **info):
-        if 'album' in values and 'id' in values['album']:
-            return values['album']['id']
-        return v
-
-    @validator('artist_ids', pre=True)
-    def extract_artist_ids(cls, v, values, **info):
-        artists = values.get('artists', [])
-        return [artist.get('id') for artist in artists if 'id' in artist]
-
-
-class PlaylistTrack(BaseModel):
-    """
-    This model represents a single track within a playlist.
-    """
-    id: str
-    name: str
-    # Add other relevant track fields as needed (e.g., duration_ms, artist_ids)
+    @staticmethod
+    def from_dict(data: dict) -> 'Track':
+        return Track(
+            id=data['id'],
+            name=data['name'],
+            album=Album(**data['album']),
+            artist_ids=[artist['id'] for artist in data['artists']],
+            duration_ms=data['duration_ms'],
+            popularity=data.get('popularity'),
+            explicit=data.get('explicit', False),
+            track_number=data['track_number']
+        )
 
 class Playlist(BaseModel):
     id: str
     name: str
     description: Optional[str]
-    owner_id: Optional[Dict[str, str]] = None
+    owner_id: str
     snapshot_id: str
-    followers: Dict[str, Optional[int]] = {}
+    followers: int
     public: bool
-    images: List[Image]
-    tracks: List[PlaylistTrack] = []
-    
-    class Config:
-        from_attributes = True
+    tracks: List[Track] = Field(default_factory=list)
 
-# Update: Set a default empty list for 'tracks'
-    
+    @staticmethod
+    def from_dict(data: dict) -> 'Playlist':
+        return Playlist(
+            id=data['id'],
+            name=data['name'],
+            description=data.get('description'),
+            owner_id=data['owner']['id'],
+            snapshot_id=data['snapshot_id'],
+            followers=data['followers']['total'],
+            public=data['public'],
+            tracks=[Track.from_dict(track['track']) for track in data['tracks']['items']]
+        )

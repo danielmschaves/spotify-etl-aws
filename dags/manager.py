@@ -29,22 +29,27 @@ class DuckDBManager:
             logger.error(f"Error creating DuckDB connection: {e}")
             return None
 
-    def execute_query(self, query: str) -> None:
+    def execute_query(self, query: str, params=None) -> None:
         """
-        Executes a SQL query.
+        Executes a SQL query with optional parameters.
 
         Args:
             query (str): SQL query to execute.
+            params (tuple, optional): Parameters to substitute into the query.
 
         Returns:
             None
         """
         try:
-            logger.info("Executing query")
-            self.connection.execute(query)
-            logger.success("Query executed")
+            logger.info("Executing query with parameters")
+            if params is not None:
+                self.connection.execute(query, params)
+            else:
+                self.connection.execute(query)
+            logger.success("Query executed successfully")
         except Exception as e:
             logger.error(f"Error executing query: {e}")
+
                       
 class AWSManager:
     """
