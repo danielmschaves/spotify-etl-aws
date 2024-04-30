@@ -100,7 +100,7 @@ class DataManager:
                     "explicit": track.get("explicit", False),
                     "track_number": track.get("track_number"),
                     "album_release_date": album.get("release_date") if album else None,
-                    "artist_id": artists[0]["id"] if artists else None
+                    "artist_id": artists[0]["id"] if artists else None,
                 }
                 self.insert_data(track_table_name, track_info)
 
@@ -154,6 +154,7 @@ class DataManager:
         placeholders = ", ".join(["?" for _ in data])
         insert_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
         self.db_manager.execute_query(insert_query, list(data.values()))
+
     def save_to_local(self, table_name) -> None:
         """
         Saves data to local disk in parquet format.
@@ -173,7 +174,9 @@ class DataManager:
             result = self.db_manager.execute_query(query)
             logger.info(f"Query result: {result}")
             if os.path.exists(local_file_path):
-                logger.success(f"{table_name} table saved locally as parquet at {local_file_path}")
+                logger.success(
+                    f"{table_name} table saved locally as parquet at {local_file_path}"
+                )
             else:
                 logger.error(f"File was not created at {local_file_path}")
         except Exception as e:
@@ -200,6 +203,7 @@ class DataManager:
             logger.success(f"{table_name} table saved to S3 at {s3_file_path}")
         except Exception as e:
             logger.error(f"Error saving {table_name} to S3: {e}", exc_info=True)
+
 
 class Ingestor:
     """
