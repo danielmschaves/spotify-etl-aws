@@ -9,7 +9,7 @@ from typing import List, Optional, Dict
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from manager import AWSManager, DuckDBManager
-from model import Artist, Album, Track, Playlist, Image
+
 
 class DataManager:
     """
@@ -26,90 +26,134 @@ class DataManager:
     def load_and_transform_data(self, json_path: str, table_name: str):
         """
         Loads and transforms data from a JSON file into a database table.
-
         Args:
             json_path (str): Path to the JSON file containing the data.
             table_name (str): Name of the table to create or insert data into.
         """
         logger.info(f"Attempting to load data from {json_path} into table {table_name}")
         try:
-            with open(json_path, 'r') as file:
+            with open(json_path, "r") as file:
                 data = json.load(file)
 
-            if isinstance(data, dict):  # Assuming the data is a single playlist dictionary
-                self.handle_playlist(data, table_name)
-            elif isinstance(data, list):  # Assuming a list of playlists
-                for item in data:
-                    self.handle_playlist(item, table_name)
+            # Delegate data handling based on type, could be a list of playlists or a single playlist
+            self.process_data(data, table_name)
 
         except json.JSONDecodeError as e:
             logger.error(f"JSON decoding error at {json_path}: {e}")
         except Exception as e:
-            logger.error(f"An error occurred during data loading from {json_path}: {traceback.format_exc()}")
+            logger.error(
+                f"An error occurred during data loading from {json_path}: {traceback.format_exc()}"
+            )
+
+    def process_data(self, data, table_name):
+        """
+        Processes data based on type, could be list of items or single item.
+        """
+        if isinstance(data, dict):  # Handling single playlist
+            self.handle_playlist(data, table_name)
+        elif isinstance(data, list):  # Handling multiple playlists
+            for item in data:
+                self.handle_playlist(item, table_name)
 
     def handle_playlist(self, playlist_data, table_name):
         """
         Handles the insertion of playlist data into the database.
-
-        Args:
-            playlist_data (dict): The playlist data to insert.
-            table_name (str): The table where the data will be inserted.
         """
         try:
             playlist_info = {
-                'id': playlist_data['id'],
-                'name': playlist_data['name'],
-                'description': playlist_data.get('description', ''),
-                'owner_id': playlist_data['owner']['id'],
-                'followers': playlist_data['followers']['total'],
-                'public': playlist_data['public'],
+                "id": playlist_data["id"],
+                "name": playlist_data["name"],
+                "description": playlist_data.get("description", ""),
+                "owner_id": playlist_data["owner"]["id"],
+                "followers": playlist_data["followers"]["total"],
+                "public": playlist_data["public"],
             }
+            self.insert_data("playlists", playlist_info)
 
-            field_definitions = ', '.join([f"{k} TEXT" for k in playlist_info.keys()])
-            create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({field_definitions});"
-            self.db_manager.execute_query(create_table_query)
-
-            columns = ', '.join(playlist_info.keys())
-            placeholders = ', '.join(['?' for _ in playlist_info])
-            insert_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-            self.db_manager.execute_query(insert_query, list(playlist_info.values()))
-
-            # If tracks are present, handle them separately
-            if 'tracks' in playlist_data:
-                self.handle_tracks(playlist_data['tracks'], playlist_data['id'])
+            # Further data handling if tracks, albums, or artists are present
+            if "tracks" in playlist_data:
+                self.handle_tracks(playlist_data["tracks"], playlist_data["id"])
 
         except Exception as e:
-            logger.error(f"Error processing playlist data for {table_name}: {traceback.format_exc()}")
+            logger.error(
+                f"Error processing playlist data for {table_name}: {traceback.format_exc()}"
+            )
 
     def handle_tracks(self, tracks_data, playlist_id):
         """
         Handles the insertion of track data related to a specific playlist into the database.
-
-        Args:
-            tracks_data (dict): The tracks data section from the playlist.
-            playlist_id (str): The playlist ID to which these tracks are related.
         """
         try:
             track_table_name = "tracks"
-            for track_item in tracks_data['items']:
+            for track_item in tracks_data["items"]:
+                track = track_item["track"]
+                album = track["album"]
+                artists = track["artists"]
+
                 track_info = {
-                    'track_id': track_item['track']['id'],
-                    'name': track_item['track']['name'],
-                    'playlist_id': playlist_id,
+                    "track_id": track["id"],
+                    "name": track["name"],
+                    "playlist_id": playlist_id,
+                    "album_id": album["id"] if album else None,
+                    "duration_ms": track.get("duration_ms"),
+                    "popularity": track.get("popularity"),
+                    "explicit": track.get("explicit", False),
+                    "track_number": track.get("track_number"),
+                    "album_release_date": album.get("release_date") if album else None,
+                    "artist_id": artists[0]["id"] if artists else None
                 }
+                self.insert_data(track_table_name, track_info)
 
-                track_fields = ', '.join([f"{k} TEXT" for k in track_info.keys()])
-                create_track_table_query = f"CREATE TABLE IF NOT EXISTS {track_table_name} ({track_fields});"
-                self.db_manager.execute_query(create_track_table_query)
-
-                track_columns = ', '.join(track_info.keys())
-                track_placeholders = ', '.join(['?' for _ in track_info])
-                insert_track_query = f"INSERT INTO {track_table_name} ({track_columns}) VALUES ({track_placeholders})"
-                self.db_manager.execute_query(insert_track_query, list(track_info.values()))
+                # Assuming album and artists handling functions exist
+                if album:
+                    self.handle_album(album, track["id"])
+                if artists:
+                    self.handle_artists(artists, track["id"])
 
         except Exception as e:
-            logger.error(f"Error processing tracks for playlist {playlist_id}: {traceback.format_exc()}")
+            logger.error(
+                f"Error processing tracks for playlist {playlist_id}: {traceback.format_exc()}"
+            )
 
+    def handle_album(self, album_data, track_id):
+        """
+        Handles the insertion of album data related to a specific track.
+        """
+        album_info = {
+            "album_id": album_data["id"],
+            "name": album_data["name"],
+            "release_date": album_data["release_date"],
+            "total_tracks": album_data["total_tracks"],
+            "track_id": track_id,  # Linking album to track
+        }
+        self.insert_data("albums", album_info)
+
+    def handle_artists(self, artists_data, track_id):
+        """
+        Handles the insertion of artist data related to a specific track.
+        """
+        for artist in artists_data:
+            artist_info = {
+                "artist_id": artist["id"],
+                "name": artist["name"],
+                "track_id": track_id,  # Linking artist to track
+            }
+            self.insert_data("artists", artist_info)
+
+    def insert_data(self, table_name, data):
+        """
+        Generic method to insert data into the specified table.
+        """
+        field_definitions = ", ".join([f"{k} TEXT" for k in data.keys()])
+        create_table_query = (
+            f"CREATE TABLE IF NOT EXISTS {table_name} ({field_definitions});"
+        )
+        self.db_manager.execute_query(create_table_query)
+
+        columns = ", ".join(data.keys())
+        placeholders = ", ".join(["?" for _ in data])
+        insert_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+        self.db_manager.execute_query(insert_query, list(data.values()))
     def save_to_local(self, table_name) -> None:
         """
         Saves data to local disk in parquet format.
@@ -126,10 +170,14 @@ class DataManager:
                 TO '{local_file_path}'
                 (FORMAT PARQUET)
             """
-            self.db_manager.execute_query(query)
-            logger.success(f"{table_name} table saved locally as parquet!")
+            result = self.db_manager.execute_query(query)
+            logger.info(f"Query result: {result}")
+            if os.path.exists(local_file_path):
+                logger.success(f"{table_name} table saved locally as parquet at {local_file_path}")
+            else:
+                logger.error(f"File was not created at {local_file_path}")
         except Exception as e:
-            logger.error(f"Error saving {table_name} to local: {e}")
+            logger.error(f"Error saving {table_name} to local: {e}", exc_info=True)
 
     def save_to_s3(self, table_name) -> None:
         """
@@ -146,10 +194,12 @@ class DataManager:
                 TO '{s3_file_path}'
                 (FORMAT PARQUET)
             """
-            self.db_manager.execute_query(query)
-            logger.success(f"{table_name} table saved to S3!")
+            result = self.db_manager.execute_query(query)
+            logger.info(f"Query result: {result}")
+            # Optionally, use boto3 to check if the file exists in S3 after the operation
+            logger.success(f"{table_name} table saved to S3 at {s3_file_path}")
         except Exception as e:
-            logger.error(f"Error saving {table_name} to S3: {e}")
+            logger.error(f"Error saving {table_name} to S3: {e}", exc_info=True)
 
 class Ingestor:
     """
@@ -164,38 +214,53 @@ class Ingestor:
         self.aws_manager = aws_manager
         self.data_manager = data_manager
 
-    def execute(self, json_path, table_name):
+    def execute(self, json_path, playlist_table):
         """
         Executes the data ingestion process including loading data, transforming it,
         and exporting it to local and S3 storage.
 
         Args:
             json_path (str): Path to the JSON file containing the data.
-            table_name (str): Name of the table to load data into.
+            playlist_table (str): Name of the playlist table to load data into.
+            Other tables such as 'tracks', 'albums', and 'artists' are handled internally.
         """
-        logger.info(f"Starting the data ingestion process for table: {table_name}.")
+        logger.info(f"Starting the data ingestion process for {playlist_table}.")
 
         # Loading and Transforming Data
         try:
-            self.data_manager.load_and_transform_data(json_path, table_name)
-            logger.info(f"Data loaded and transformed successfully for table: {table_name}.")
+            data = self.data_manager.load_and_transform_data(json_path, playlist_table)
+            logger.info(
+                f"Data loaded and transformed successfully for {playlist_table}."
+            )
         except Exception as e:
-            logger.error(f"Error during data loading and transformation for {table_name}: {e}")
+            logger.error(
+                f"Error during data loading and transformation for {playlist_table}: {e}"
+            )
             return  # Exit if data loading fails to prevent further errors
 
+        # Prepare tables for export
+        tables = ["playlists", "tracks", "albums", "artists"]
+
         # Exporting Data to Local Storage
-        try:
-            self.data_manager.save_to_local(table_name)
-            logger.success(f"Data successfully saved to local storage for table: {table_name}.")
-        except Exception as e:
-            logger.error(f"Error saving data to local storage for {table_name}: {e}")
+        for table in tables:
+            try:
+                self.data_manager.save_to_local(table)
+                logger.success(
+                    f"Data successfully saved to local storage for table: {table}."
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error saving data to local storage for table {table}: {e}"
+                )
 
         # Exporting Data to S3 Storage
-        try:
-            self.data_manager.save_to_s3(table_name)
-            logger.success(f"Data successfully saved to S3 for table: {table_name}.")
-        except Exception as e:
-            logger.error(f"Error saving data to S3 for {table_name}: {e}")
+        for table in tables:
+            try:
+                self.data_manager.save_to_s3(table)
+                logger.success(f"Data successfully saved to S3 for table: {table}.")
+            except Exception as e:
+                logger.error(f"Error saving data to S3 for table {table}: {e}")
+
 
 if __name__ == "__main__":
     # Load environment variables
@@ -209,10 +274,13 @@ if __name__ == "__main__":
     aws_region = os.getenv("AWS_REGION")
     aws_access_key = os.getenv("AWS_ACCESS_KEY")
     aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    playlist_table = os.getenv("TABLE_NAME", "playlists")
 
     # Initialize database and AWS managers
     db_manager = DuckDBManager()
-    aws_manager = AWSManager(db_manager, aws_region, aws_access_key, aws_secret_access_key)
+    aws_manager = AWSManager(
+        db_manager, aws_region, aws_access_key, aws_secret_access_key
+    )
 
     # Initialize the data manager with all necessary managers and paths
     data_manager = DataManager(db_manager, aws_manager, local_path, s3_bucket)
@@ -221,4 +289,8 @@ if __name__ == "__main__":
     ingestor = Ingestor(db_manager, aws_manager, data_manager)
 
     # Execute the data ingestion process
-    ingestor.execute(json_path, table_name)
+    try:
+        ingestor.execute(json_path, playlist_table)
+        logger.info("Data ingestion completed successfully.")
+    except Exception as e:
+        logger.error(f"An error occurred during data ingestion: {e}")

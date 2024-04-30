@@ -13,62 +13,112 @@ from bronze import DataManager
 load_dotenv()
 
 # Configuration
-AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
-RAW_S3_PATH = os.getenv("RAW_S3_PATH")
-BRONZE_S3_PATH = os.getenv("BRONZE_S3_PATH")
-LOCAL_PATH = "data/bronze/"
-TABLE_NAME = "spotify_data"
+aws_access_key = os.getenv("AWS_ACCESS_KEY")
+aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+bronze_bucket = os.getenv("BRONZE_BUCKET")
+aws_region = os.getenv("AWS_REGION")
+raw_s3_path = os.getenv("RAW_S3_PATH")
+bronze_s3_path = os.getenv("BRONZE_S3_PATH")
+local_path = "data/bronze/"
+table_names = ["playlist", "tracks", "album", "artist"]
+
+# Initialize the database and AWS managers
+db_manager = DuckDBManager()
+aws_manager = AWSManager(db_manager, aws_region, aws_access_key, aws_secret_access_key)
+data_manager = DataManager(db_manager, aws_manager, local_path, bronze_bucket)
+
 
 default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'start_date': datetime(2024, 4, 1),
-    'email_on_failure': True,
-    'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
-    'catchup': False
+    "owner": "airflow",
+    "depends_on_past": False,
+    "start_date": datetime(2024, 4, 1),
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "retries": 1,
+    "retry_delay": timedelta(minutes=5),
+    "catchup": False,
 }
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("airflow.task")
 
-@dag(default_args=default_args, schedule_interval='@daily', catchup=False, tags=['spotify_bronze_etl'])
+
+@dag(
+    default_args=default_args,
+    schedule_interval="@daily",
+    catchup=False,
+    tags=["spotify_bronze_etl"],
+)
 def spotify_bronze_etl_dag():
     """
     Airflow DAG to load, transform, and export data from raw JSON files into a DuckDB database,
     and then to local and S3 storage.
     """
+
     @task
     def load_and_transform_data():
-        db_manager = DuckDBManager()
-        data_manager = DataManager(db_manager, LOCAL_PATH, AWS_BUCKET_NAME, TABLE_NAME)
-        logger.info(f"Initiating load and transform for {RAW_S3_PATH} into {TABLE_NAME}")
+        logger.info(f"Initiating load and transform for {raw_s3_path} into playlists")
         try:
-            data_manager.load_and_transform_data(RAW_S3_PATH, TABLE_NAME)
-            logger.info(f"Successfully loaded and transformed data for {TABLE_NAME}")
+            data = data_manager.load_and_transform_data(raw_s3_path, "playlists")
+            if data:
+                logger.info("Successfully loaded and transformed data for playlists")
+                return data
+            else:
+                logger.error("No data returned from load and transform")
+                return None
         except Exception as e:
-            logger.error(f"Failed to load and transform data for {TABLE_NAME}: {e}")
+            logger.error(f"Failed to load and transform data: {e}")
             raise
 
     @task
-    def export_data():
-        db_manager = DuckDBManager()
-        aws_manager = AWSManager(db_manager, AWS_BUCKET_NAME, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
-        data_manager = DataManager(db_manager, aws_manager, LOCAL_PATH, AWS_BUCKET_NAME)
-        logger.info(f"Initiating data export for {TABLE_NAME}")
-        try:
-            data_manager.export_data(TABLE_NAME)
-            logger.info(f"Successfully exported data for {TABLE_NAME}")
-        except Exception as e:
-            logger.error(f"Failed to export data for {TABLE_NAME}: {e}")
-            raise
+    def process_tracks(data):
+        if data:
+            logger.info("Processing tracks from playlists")
+            if 'tracks' in data:
+                data_manager.handle_tracks(data['tracks'], data['id'])
+        else:
+            logger.warning("No playlist data to process tracks from")
 
-    load_and_transform_task = load_and_transform_data()
-    export_task = export_data()
+    @task
+    def process_albums(data):
+        if data:
+            logger.info("Processing albums from tracks")
+            if 'albums' in data:
+                for track in data['tracks']:
+                    data_manager.handle_album(track['album'], track['track']['id'])
 
-    load_and_transform_task >> export_task
+    @task
+    def process_artists(data):
+        if data:
+            logger.info("Processing artists from tracks")
+            if 'artists' in data:
+                for track in data['tracks']:
+                    data_manager.handle_artists(track['artists'], track['track']['id'])
+
+    @task
+    def save_to_local():
+        logger.info("Saving data to local storage")
+        for table_name in table_names:
+            data_manager.save_to_local(table_name)
+
+    @task
+    def save_to_s3():
+        logger.info("Saving data to S3")
+        for table_name in table_names:
+            data_manager.save_to_s3(table_name)
+
+    # Task dependencies
+    playlist_data = load_and_transform_data()
+    tracks_data = process_tracks(playlist_data)
+    albums_data = process_albums(playlist_data)
+    artists_data = process_artists(playlist_data)
+
+    # Final saving steps
+    save_local_task = save_to_local()
+    save_s3_task = save_to_s3()
+
+    # Setting dependencies
+    [tracks_data, albums_data, artists_data] >> save_local_task
+    save_local_task >> save_s3_task
 
 # Instantiate the DAG
-dag = spotify_bronze_etl_dag()
+spotify_etl_dag = spotify_bronze_etl_dag()
