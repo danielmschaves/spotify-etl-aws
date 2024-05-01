@@ -8,7 +8,7 @@ import json
 from typing import List, Optional, Dict
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from manager import AWSManager, DuckDBManager
+from manager import AWSManager, DuckDBManager, MotherDuckManager
 
 
 class DataManager:
@@ -17,11 +17,15 @@ class DataManager:
     Handles loading, validating, transforming, and exporting data to both local and AWS S3 storage.
     """
 
-    def __init__(self, db_manager, aws_manager, local_path, s3_bucket):
+    def __init__(self, db_manager, aws_manager, local_path, s3_bucket, local_database: str, remote_database: str, bronze_schema: str):
         self.db_manager = db_manager
         self.aws_manager = aws_manager
         self.local_path = local_path
         self.s3_bucket = s3_bucket
+        self.local_database = local_database
+        self.remote_database = remote_database
+        self.bronze_schema = bronze_schema
+        
 
     def load_and_transform_data(self, json_path: str, table_name: str):
         """
@@ -204,19 +208,46 @@ class DataManager:
         except Exception as e:
             logger.error(f"Error saving {table_name} to S3: {e}", exc_info=True)
 
+    def save_to_md(self, table_name) -> None:
+        """
+        Saves data to MotherDuck for the specified table.
+
+        Args:
+            table_name (str): The name of the table to save.
+        """
+        try:
+            logger.info(f"Saving {table_name} table to Mother Duck")
+            #self.db_manager.execute_query(
+            #    f"CREATE DATABASE IF NOT EXISTS {self.remote_database}"
+            #)
+            self.db_manager.execute_query(
+                f"CREATE SCHEMA IF NOT EXISTS {self.bronze_schema};"
+            )
+            query = f"""
+                CREATE OR REPLACE TABLE {self.bronze_schema}.{table_name} AS
+                    SELECT
+                        *
+                    FROM {self.local_database}.{table_name};
+                """
+            self.db_manager.execute_query(query)
+            logger.info(f"{table_name} table saved to MotherDuck!")
+        except Exception as e:
+            logger.error(f"Error saving {table_name} to MotherDuck: {e}")
+
 
 class Ingestor:
     """
     Orchestrates the entire data ingestion process.
     """
 
-    def __init__(self, db_manager, aws_manager, data_manager):
+    def __init__(self, db_manager, aws_manager, data_manager, motherduck_manager):
         """
         Initializes Ingestor with database and AWS managers.
         """
         self.db_manager = db_manager
         self.aws_manager = aws_manager
         self.data_manager = data_manager
+        self.motherduck_manager = motherduck_manager
 
     def execute(self, json_path, playlist_table):
         """
@@ -265,6 +296,14 @@ class Ingestor:
             except Exception as e:
                 logger.error(f"Error saving data to S3 for table {table}: {e}")
 
+        # Exporting Data to MotherDuck
+        for table in tables:
+            try:
+                self.data_manager.save_to_md(table)
+                logger.success(f"Data successfully saved to MotherDuck for table: {table}.")
+            except Exception as e:
+                logger.error(f"Error saving data to MotherDuck for table {table}: {e}")
+
 
 if __name__ == "__main__":
     # Load environment variables
@@ -279,18 +318,25 @@ if __name__ == "__main__":
     aws_access_key = os.getenv("AWS_ACCESS_KEY")
     aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     playlist_table = os.getenv("TABLE_NAME", "playlists")
+    motherduck_token = os.getenv("MOTHERDUCK_TOKEN")
+    local_database = "memory"
+    remote_dabase = "spotify_data"
+    bronze_schema = "bronze"
+
+    
 
     # Initialize database and AWS managers
     db_manager = DuckDBManager()
     aws_manager = AWSManager(
         db_manager, aws_region, aws_access_key, aws_secret_access_key
     )
+    motherduck_manager = MotherDuckManager(db_manager, motherduck_token)
 
     # Initialize the data manager with all necessary managers and paths
-    data_manager = DataManager(db_manager, aws_manager, local_path, s3_bucket)
+    data_manager = DataManager(db_manager, aws_manager, local_path, s3_bucket, local_database, remote_dabase, bronze_schema)
 
     # Initialize the ingestor with all managers
-    ingestor = Ingestor(db_manager, aws_manager, data_manager)
+    ingestor = Ingestor(db_manager, aws_manager, data_manager, motherduck_manager)
 
     # Execute the data ingestion process
     try:
