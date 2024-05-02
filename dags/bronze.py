@@ -6,6 +6,7 @@ from pydantic import ValidationError
 import traceback
 import json
 from typing import List, Optional, Dict
+import boto3
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from manager import AWSManager, DuckDBManager, MotherDuckManager
@@ -17,14 +18,15 @@ class DataManager:
     Handles loading, validating, transforming, and exporting data to both local and AWS S3 storage.
     """
 
-    def __init__(self, db_manager, aws_manager, local_path, s3_bucket, local_database: str, remote_database: str, bronze_schema: str):
+    def __init__(self, db_manager, aws_manager, local_path, bronze_s3_path, local_database: str, remote_database: str, bronze_schema: str):
         self.db_manager = db_manager
         self.aws_manager = aws_manager
         self.local_path = local_path
-        self.s3_bucket = s3_bucket
+        self.bronze_s3_path = bronze_s3_path
         self.local_database = local_database
         self.remote_database = remote_database
         self.bronze_schema = bronze_schema
+        self.s3_client = boto3.client('s3')
         
 
     def load_and_transform_data(self, json_path: str, table_name: str):
@@ -178,9 +180,7 @@ class DataManager:
             result = self.db_manager.execute_query(query)
             logger.info(f"Query result: {result}")
             if os.path.exists(local_file_path):
-                logger.success(
-                    f"{table_name} table saved locally as parquet at {local_file_path}"
-                )
+                logger.success(f"{table_name} table saved locally as parquet at {local_file_path}")
             else:
                 logger.error(f"File was not created at {local_file_path}")
         except Exception as e:
@@ -188,25 +188,56 @@ class DataManager:
 
     def save_to_s3(self, table_name) -> None:
         """
-        Saves data to Amazon S3 in parquet format.
+        Manually uploads a parquet file from local disk to Amazon S3.
+        Args:
+            table_name (str): The name of the table to save.
+        Returns:
+            None
         """
+        local_file_path = os.path.join(self.local_path, f"{table_name}.parquet")
+        s3_file_path = f"{self.bronze_s3_path}{table_name}.parquet".replace('s3://', '')
+
+        if not os.path.exists(local_file_path):
+            logger.error(f"Local file {local_file_path} does not exist.")
+            return
+
+        bucket = s3_file_path.split('/')[0]
+        key = '/'.join(s3_file_path.split('/')[1:])
+
         try:
-            logger.info(f"Saving {table_name} table to S3 as parquet")
-            s3_file_path = f"s3://{self.s3_bucket}/{table_name}.parquet"
-            query = f"""
-                COPY (
-                    SELECT *
-                    FROM {table_name}
-                )
-                TO '{s3_file_path}'
-                (FORMAT PARQUET)
-            """
-            result = self.db_manager.execute_query(query)
-            logger.info(f"Query result: {result}")
-            # Optionally, use boto3 to check if the file exists in S3 after the operation
-            logger.success(f"{table_name} table saved to S3 at {s3_file_path}")
+            with open(local_file_path, 'rb') as data:
+                self.s3_client.upload_fileobj(data, bucket, key)
+            logger.success(f"Successfully saved {table_name} to S3 at {s3_file_path}")
         except Exception as e:
-            logger.error(f"Error saving {table_name} to S3: {e}", exc_info=True)
+            logger.error(f"Error uploading {table_name} to S3: {e}")
+
+
+    # def save_to_s3(self, table_name) -> None:
+    #     """
+    #     Saves data to Amazon S3 in parquet format.
+    #     Args:
+    #         table_name (str): The name of the table to save.
+    #     Returns:
+    #         None
+    #     """
+    #     try:
+    #     # Construct the full S3 path for the file
+    #         s3_file_path = f"{self.bronze_s3_path}{table_name}.parquet"
+    #         logger.info(f"Full S3 path to save: {s3_file_path}")
+            
+    #         query = f"""
+    #             COPY (
+    #                 SELECT *
+    #                 FROM {table_name}
+    #             )
+    #             TO '{s3_file_path}'
+    #             WITH (FORMAT PARQUET);
+    #         """
+    #         logger.info(f"Executing query to save {table_name} to S3 at {s3_file_path}")
+    #         self.db_manager.execute_query(query)
+    #         logger.success(f"Successfully saved {table_name} to S3 at {s3_file_path}")
+    #     except Exception as e:
+    #         logger.error(f"Error saving {table_name} to S3: {e}")
 
     def save_to_md(self, table_name) -> None:
         """
@@ -217,14 +248,14 @@ class DataManager:
         """
         try:
             logger.info(f"Saving {table_name} table to Mother Duck")
-            #self.db_manager.execute_query(
-            #    f"CREATE DATABASE IF NOT EXISTS {self.remote_database}"
-            #)
             self.db_manager.execute_query(
-                f"CREATE SCHEMA IF NOT EXISTS {self.bronze_schema};"
+                f"CREATE DATABASE IF NOT EXISTS {self.remote_database}"
+            )
+            self.db_manager.execute_query(
+                f"CREATE SCHEMA IF NOT EXISTS {self.remote_database}.{self.bronze_schema};"
             )
             query = f"""
-                CREATE OR REPLACE TABLE {self.bronze_schema}.{table_name} AS
+                CREATE OR REPLACE TABLE {self.remote_database}.{self.bronze_schema}.{table_name} AS
                     SELECT
                         *
                     FROM {self.local_database}.{table_name};
@@ -232,7 +263,7 @@ class DataManager:
             self.db_manager.execute_query(query)
             logger.info(f"{table_name} table saved to MotherDuck!")
         except Exception as e:
-            logger.error(f"Error saving {table_name} to MotherDuck: {e}")
+            logger.error(f"Error saving {table_name} to MotherDuck: {traceback.format_exc()}")
 
 
 class Ingestor:
@@ -313,16 +344,15 @@ if __name__ == "__main__":
     json_path = os.getenv("JSON_PATH", "path_to_json")
     table_name = os.getenv("TABLE_NAME", "spotify_data")
     local_path = os.getenv("LOCAL_PATH", "/data/bronze/")
-    s3_bucket = os.getenv("AWS_BUCKET_NAME")
     aws_region = os.getenv("AWS_REGION")
     aws_access_key = os.getenv("AWS_ACCESS_KEY")
     aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
     playlist_table = os.getenv("TABLE_NAME", "playlists")
     motherduck_token = os.getenv("MOTHERDUCK_TOKEN")
     local_database = "memory"
-    remote_dabase = "spotify_data"
+    remote_database = "playlist"
     bronze_schema = "bronze"
-
+    bronze_s3_path = os.getenv("BRONZE_S3_PATH")
     
 
     # Initialize database and AWS managers
@@ -333,7 +363,7 @@ if __name__ == "__main__":
     motherduck_manager = MotherDuckManager(db_manager, motherduck_token)
 
     # Initialize the data manager with all necessary managers and paths
-    data_manager = DataManager(db_manager, aws_manager, local_path, s3_bucket, local_database, remote_dabase, bronze_schema)
+    data_manager = DataManager(db_manager, aws_manager, local_path, bronze_s3_path, local_database, remote_database, bronze_schema)
 
     # Initialize the ingestor with all managers
     ingestor = Ingestor(db_manager, aws_manager, data_manager, motherduck_manager)

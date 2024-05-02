@@ -24,6 +24,7 @@ class DuckDBManager:
             logger.info("Creating DuckDB connection")
             duckdb_conn = duckdb.connect()
             logger.success("DuckDB connection created!")
+            duckdb_conn.execute("SET s3_endpoint='s3.us-east-2.amazonaws.com'")
             return duckdb_conn
         except Exception as e:
             logger.error(f"Error creating DuckDB connection: {e}")
