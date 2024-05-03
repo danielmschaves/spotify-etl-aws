@@ -11,21 +11,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 from manager import DuckDBManager, MotherDuckManager, AWSManager
 
-load_dotenv()
-
-# Load environment variables
-MOTHERDUCK_TOKEN = os.getenv("MOTHERDUCK_TOKEN")
-AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_REGION = os.getenv("AWS_REGION")
-BRONZE_S3_PATH = os.getenv("BRONZE_S3_PATH")
-SILVER_S3_PATH = os.getenv("SILVER_S3_PATH")
-LOCAL_PATH = "data/silver/"
-TABLE_NAME = "cards"
-SILVER_SCHEMA = "silver"
-LOCAL_DATABASE = "memory"
-REMOTE_DATABASE = "playlist"
-
 
 class DataManager:
     """
@@ -176,6 +161,22 @@ class Ingestor:
         except Exception as e:
             logger.error(f"Error executing data ingestion process: {e}")
             raise e
+
+
+load_dotenv()
+
+# Load environment variables
+MOTHERDUCK_TOKEN = os.getenv("MOTHERDUCK_TOKEN")
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_REGION = os.getenv("AWS_REGION")
+BRONZE_S3_PATH = os.getenv("BRONZE_S3_PATH")
+SILVER_S3_PATH = os.getenv("SILVER_S3_PATH")
+LOCAL_PATH = "data/silver/"
+TABLE_NAME = "playlist"
+SILVER_SCHEMA = "silver"
+LOCAL_DATABASE = "memory"
+REMOTE_DATABASE = "playlist"
 
 
 if __name__ == "__main__":
