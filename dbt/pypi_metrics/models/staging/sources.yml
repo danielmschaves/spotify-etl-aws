@@ -1,0 +1,20 @@
+# set the parameters for sources from mother duck, database named playlist, schema silver, table named playlists
+
+version: 2
+
+sources:
+  - name: playlist
+    database: motherduck
+    schema: silver
+    tables:
+      - name: playlists
+        identifier: playlists
+
+      - name: tracks
+        identifier: tracks
+
+      - name: artists
+        identifier: artists
+
+      - name: albums
+        identifier: albums
