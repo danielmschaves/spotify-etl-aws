@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: playlists
+  - name: stg_playlists
     description: "This view represents user-created playlists, detailing each playlist's properties, ownership, and audience visibility."
     columns:
       - name: playlist_id
@@ -17,7 +17,7 @@ models:
       - name: playlist_public
         description: "Boolean flag indicating whether the playlist is public or private."
 
-  - name: tracks
+  - name: stg_tracks
     description: "Contains detailed information about each track, including links to the playlist and album it belongs to, its popularity, and specific track details."
     columns:
       - name: track_id
@@ -41,7 +41,7 @@ models:
       - name: artist_id
         description: "Foreign key to artists. Identifier of the artist who performed the track."
 
-  - name: artists
+  - name: stg_artists
     description: "Details about artists, including their names and the tracks they have performed."
     columns:
       - name: artist_id
@@ -51,7 +51,7 @@ models:
       - name: track_id
         description: "Foreign key to tracks. Identifier of a track performed by the artist."
 
-  - name: albums
+  - name: stg_albums
     description: "Details about albums, including their release dates, the tracks they contain, and their overall popularity."
     columns:
       - name: album_id

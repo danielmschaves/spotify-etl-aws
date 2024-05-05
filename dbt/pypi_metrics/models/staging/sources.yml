@@ -1,20 +1,25 @@
-# set the parameters for sources from mother duck, database named playlist, schema silver, table named playlists
-
 version: 2
 
 sources:
   - name: playlist
-    database: motherduck
-    schema: silver
+    config:
+      aws_access_key_id: "{{ env_var('AWS_ACCESS_KEY') }}"
+      aws_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+    meta:
+      external_location: "{{ env_var('SILVER_S3_PATH') }}"  
     tables:
       - name: playlists
         identifier: playlists
+        file_format: parquet
 
       - name: tracks
         identifier: tracks
+        file_format: parquet
 
       - name: artists
         identifier: artists
+        file_format: parquet
 
       - name: albums
         identifier: albums
+        file_format: parquet

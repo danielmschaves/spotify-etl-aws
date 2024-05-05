@@ -8,7 +8,7 @@
 
 {{ config(materialized='view') }}
 
-with artists as (
+with stg_artists as (
     select
         cast(artist_id as int) as artist_id,
         cast(name as varchar) as artist_name,

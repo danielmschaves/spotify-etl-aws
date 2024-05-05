@@ -15,7 +15,7 @@
 
 {{ config(materialized='view') }}
 
-with tracks as (
+with stg_tracks as (
     select
         cast(track_id as int) as track_id,
         cast(name as varchar) as track_name,

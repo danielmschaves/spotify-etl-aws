@@ -11,7 +11,7 @@
 
 {{ config(materialized='view') }}
 
-with albums as (
+with stg_albums as (
     select
         cast(album_id as int) as album_id,
         cast(name as varchar) as album_name,

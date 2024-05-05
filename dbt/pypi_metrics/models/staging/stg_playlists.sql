@@ -3,7 +3,7 @@
 -- create first view in model, casting columns to correct data types, renaming columns and setting primary and foreign keys
 -- this view will be used to create the final playlists table
 
-with playlists as (
+with stg_playlists as (
     select
         cast(id as int) as playlist_id,
         cast(name as varchar) as playlist_name,
