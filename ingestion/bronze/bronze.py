@@ -9,7 +9,7 @@ from typing import List, Optional, Dict
 import boto3
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from manager import AWSManager, DuckDBManager, MotherDuckManager
+from ingestion.manager.manager import AWSManager, DuckDBManager, MotherDuckManager
 
 
 class DataManager:
@@ -341,7 +341,7 @@ if __name__ == "__main__":
     load_dotenv()
 
     # Define configuration settings from environment variables
-    json_path = os.getenv("JSON_PATH", "path_to_json")
+    json_path = os.getenv("JSON_PATH")
     table_name = os.getenv("TABLE_NAME", "spotify_data")
     local_path = os.getenv("LOCAL_PATH", "/data/bronze/")
     aws_region = os.getenv("AWS_REGION")

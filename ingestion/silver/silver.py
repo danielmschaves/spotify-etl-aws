@@ -9,7 +9,7 @@ import boto3
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from manager import DuckDBManager, MotherDuckManager, AWSManager
+from ingestion.manager.manager import DuckDBManager, MotherDuckManager, AWSManager
 
 
 class DataManager:

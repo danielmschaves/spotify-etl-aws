@@ -68,7 +68,7 @@ class AWSManager:
         Initializes AWSManager.
 
         Args:
-            duckdb_manager (DuckDBManager): Instance of DuckDBManager.
+            db_manager (DuckDBManager): Instance of DuckDBManager.
             aws_region (str): AWS region.
             aws_access_key (str): AWS access key ID.
             aws_secret_access_key (str): AWS secret access key.
@@ -117,7 +117,7 @@ class MotherDuckManager:
         Initializes MotherDuckManager.
 
         Args:
-            duckdb_manager (DuckDBManager): Instance of DuckDBManager.
+            db_manager (DuckDBManager): Instance of DuckDBManager.
             motherduck_token (str): Token for accessing MotherDuck.
         """
         self.duckdb_manager = duckdb_manager
