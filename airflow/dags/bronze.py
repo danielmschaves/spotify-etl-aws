@@ -29,27 +29,33 @@ class DataManager:
         self.s3_client = boto3.client('s3')
         
 
-    def load_and_transform_data(self, json_path: str, table_name: str):
+    def load_and_transform_data(self, raw_bucket, json_key, table_name):
         """
-        Loads and transforms data from a JSON file into a database table.
+        Loads and transforms data from a JSON file in S3 into the desired format.
+        
         Args:
-            json_path (str): Path to the JSON file containing the data.
-            table_name (str): Name of the table to create or insert data into.
+            raw_bucket (str): Name of the S3 bucket.
+            json_key (str): The key (path) in the S3 bucket where the JSON file is stored.
+            table_name (str): Name of the table to create or insert data into (for reference or logging).
         """
-        logger.info(f"Attempting to load data from {json_path} into table {table_name}")
-        try:
-            with open(json_path, "r") as file:
-                data = json.load(file)
+        s3_file_path = f"{raw_bucket}/{json_key}"
+        logger.info(f"Attempting to load and process data from {s3_file_path} into table {table_name}")
 
-            # Delegate data handling based on type, could be a list of playlists or a single playlist
+        try:
+            # Fetch the object from S3
+            response = self.s3_client.get_object(Bucket=raw_bucket, Key=json_key)
+            json_string = response['Body'].read().decode('utf-8')
+            data = json.loads(json_string)
+
+            # Process the data
             self.process_data(data, table_name)
 
+            logger.info(f"Data successfully loaded and processed for table {table_name}")
+
         except json.JSONDecodeError as e:
-            logger.error(f"JSON decoding error at {json_path}: {e}")
+            logger.error(f"JSON decoding error for {json_key} in {raw_bucket}: {e}")
         except Exception as e:
-            logger.error(
-                f"An error occurred during data loading from {json_path}: {traceback.format_exc()}"
-            )
+            logger.error(f"An error occurred while loading data from {s3_file_path}: {e}")
 
     def process_data(self, data, table_name):
         """
@@ -280,13 +286,14 @@ class Ingestor:
         self.data_manager = data_manager
         self.motherduck_manager = motherduck_manager
 
-    def execute(self, json_path, playlist_table):
+    def execute(self, raw_bucket, json_key, playlist_table):
         """
         Executes the data ingestion process including loading data, transforming it,
         and exporting it to local and S3 storage.
 
         Args:
-            json_path (str): Path to the JSON file containing the data.
+            s3_bucket (str): Name of the S3 bucket containing the JSON data.
+            json_key (str): The S3 key of the JSON file containing the data.
             playlist_table (str): Name of the playlist table to load data into.
             Other tables such as 'tracks', 'albums', and 'artists' are handled internally.
         """
@@ -294,7 +301,7 @@ class Ingestor:
 
         # Loading and Transforming Data
         try:
-            data = self.data_manager.load_and_transform_data(json_path, playlist_table)
+            data = self.data_manager.load_and_transform_data(raw_bucket, json_key, playlist_table)
             logger.info(
                 f"Data loaded and transformed successfully for {playlist_table}."
             )
@@ -343,7 +350,7 @@ if __name__ == "__main__":
     # Define configuration settings from environment variables
     json_path = os.getenv("JSON_PATH")
     table_name = os.getenv("TABLE_NAME", "spotify_data")
-    local_path = os.getenv("LOCAL_PATH", "/data/bronze/")
+    local_path = os.getenv("LOCAL_PATH")
     aws_region = os.getenv("AWS_REGION")
     aws_access_key = os.getenv("AWS_ACCESS_KEY")
     aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -353,6 +360,8 @@ if __name__ == "__main__":
     remote_database = "playlist"
     bronze_schema = "bronze"
     bronze_s3_path = os.getenv("BRONZE_S3_PATH")
+    json_key = os.getenv("JSON_KEY")
+    raw_bucket = os.getenv("RAW_BUCKET")
     
 
     # Initialize database and AWS managers
@@ -370,7 +379,7 @@ if __name__ == "__main__":
 
     # Execute the data ingestion process
     try:
-        ingestor.execute(json_path, playlist_table)
+        ingestor.execute(raw_bucket, json_key, table_name)
         logger.info("Data ingestion completed successfully.")
     except Exception as e:
         logger.error(f"An error occurred during data ingestion: {e}")

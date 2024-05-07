@@ -4,7 +4,9 @@ from airflow.operators.python import PythonOperator
 import os
 
 def test_local_write():
-    test_directory = 'data/'  # Example relative path
+    test_directory = os.getenv("BRONZE_LOCAL_PATH")
+    if not os.path.exists(test_directory):
+        os.makedirs(test_directory)
     test_file_path = os.path.join(os.getcwd(), test_directory, 'test_file.txt')
     
     try:
