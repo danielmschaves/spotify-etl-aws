@@ -39,19 +39,29 @@ default_args = {
     "catchup": False,
 }
 
+
 # Define the DAG
-@dag(default_args=default_args, schedule_interval="@daily", catchup=False, tags=["silver_ingestion"])
+@dag(
+    default_args=default_args,
+    schedule_interval="@daily",
+    catchup=False,
+    tags=["silver_ingestion"],
+)
 def silver_ingestion():
     """
     Airflow DAG to load data from Parquet files into DuckDB, process it, and save it to various storage.
     """
-    
+
     @task
     def process_data():
         # Initialize the data manager with configuration parameters
         db_manager = DuckDBManager()
-        aws_manager = AWSManager(db_manager, aws_region, aws_access_key, aws_secret_access_key)
-        motherduck_manager = MotherDuckManager(db_manager, os.getenv("MOTHERDUCK_TOKEN"))
+        aws_manager = AWSManager(
+            db_manager, aws_region, aws_access_key, aws_secret_access_key
+        )
+        motherduck_manager = MotherDuckManager(
+            db_manager, os.getenv("MOTHERDUCK_TOKEN")
+        )
         data_manager = DataManager(
             db_manager,
             local_database,
@@ -78,6 +88,7 @@ def silver_ingestion():
 
     # Schedule the task
     process_data()
+
 
 # Instantiate the DAG
 silver_ingestion_dag = silver_ingestion()

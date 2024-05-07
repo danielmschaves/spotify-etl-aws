@@ -5,7 +5,7 @@
 
 with stg_playlists as (
     select
-        cast(id as int) as playlist_id,
+        cast(id as varchar) as playlist_id,
         cast(name as varchar) as playlist_name,
         cast(description as varchar) as playlist_description,
         cast(wner_id as varchar) as playlist_owner_id,

@@ -13,12 +13,11 @@
 
 with stg_albums as (
     select
-        cast(album_id as int) as album_id,
+        cast(album_id as varchar) as album_id,
         cast(name as varchar) as album_name,
         cast(release_date as date) as album_release_date,
-        cast(total_tracks as int) as album_total_tracks,
-        cast(popularity as int) as album_popularity,
-        cast(artist_id as int) as artist_id
+        cast(total_tracks as int) as album_total_tracks
+        cast(track_id as varchar) as album_track_id
 
     from {{ source('playlist', 'albums') }}
 )
