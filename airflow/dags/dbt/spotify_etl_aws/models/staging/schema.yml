@@ -62,7 +62,5 @@ models:
         description: "Release date of the album."
       - name: album_total_tracks
         description: "Total number of tracks in the album."
-      - name: album_popularity
-        description: "Popularity score of the album."
-      - name: artist_id
+      - name: album_track_id
         description: "Foreign key to artists. Identifier of the artist who released the album."

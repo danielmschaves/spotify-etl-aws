@@ -6,7 +6,7 @@ sources:
       aws_access_key_id: "{{ env_var('AWS_ACCESS_KEY') }}"
       aws_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
     meta:
-      external_location: "{{ env_var('SILVER_S3_PATH') }}"  
+      external_location: "read_parquet('s3://data-lake-silver-stage-spotify-197398273774/{name}.parquet', skip=3, AUTO_DETECT = True)"  
     tables:
       - name: playlists
         identifier: playlists
