@@ -9,15 +9,17 @@
 -- popularity: INT
 -- artist_id: INT (Foreign Key to Artists)
 
-{{ config(materialized='view') }}
+{{ config(materialized='table' ) }}
 
 with stg_albums as (
     select
         cast(album_id as varchar) as album_id,
         cast(name as varchar) as album_name,
         cast(release_date as date) as album_release_date,
-        cast(total_tracks as int) as album_total_tracks
+        cast(total_tracks as int) as album_total_tracks,
         cast(track_id as varchar) as album_track_id
 
     from {{ source('playlist', 'albums') }}
 )
+
+select * from stg_albums

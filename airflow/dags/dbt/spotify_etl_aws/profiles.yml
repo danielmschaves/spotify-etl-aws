@@ -4,7 +4,7 @@ spotify_etl_aws:
     dev:
       type: duckdb
       schema: gold
-      path: /usr/local/airflow/dags/dbt/spotify-etl-aws/dbt.duckdb
+      path: temp/dbt.duckdb
       extensions:
         - httpfs
         - parquet
@@ -15,5 +15,9 @@ spotify_etl_aws:
     prod:
       type: duckdb
       schema: gold
-      path: "{{ env_var('MOTHERDUCK_DATABASE') }}"
+      path: "md:playlist"
+      settings:
+        s3_region: "{{ env_var('AWS_REGION') }}"
+        s3_access_key_id: "{{ env_var('AWS_ACCESS_KEY') }}"
+        s3_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
   target: dev

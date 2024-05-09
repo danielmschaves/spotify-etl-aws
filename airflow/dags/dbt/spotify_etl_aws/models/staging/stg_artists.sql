@@ -6,7 +6,8 @@
 -- name: VARCHAR
 -- track_id: INT (Foreign Key to Tracks)
 
-{{ config(materialized='view') }}
+
+{{ config(materialized='table') }}
 
 with stg_artists as (
     select
@@ -15,3 +16,4 @@ with stg_artists as (
         cast(track_id as varchar) as track_id
     from {{ source('playlist', 'artists') }}
 )
+select * from stg_artists

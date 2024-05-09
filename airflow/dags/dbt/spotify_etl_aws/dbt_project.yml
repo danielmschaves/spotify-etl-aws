@@ -34,7 +34,8 @@ models:
   spotify_etl_aws:
     # Config indicated by + and applies to all files under models/example/
     staging:
-      +materialized: view
+      +materialized: table
     # Applies to all files under models/core/
     core:
       +materialized: table
+      +post-hook: "{{ export_playlist_tracks_data('gold', 'fact_playlist_tracks') }}"

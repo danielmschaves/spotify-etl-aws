@@ -8,3 +8,5 @@ with dim_artists as (
         
     from {{ ref('stg_artists') }}
 )
+
+select * from dim_artists

@@ -1,12 +1,3 @@
--- dim_playlist:
--- Columns:
--- playlist_id (INT - Primary Key)
--- playlist_name (VARCHAR)
--- description (VARCHAR)
--- owner_id (VARCHAR)
--- followers (INT)
--- is_public (BOOLEAN)
--- Fact Table:
 
 {{ config(materialized='table') }}
 
@@ -21,4 +12,4 @@ with dim_playlists as (
         
     from {{ ref('stg_playlists') }}
 )
-
+select * from dim_playlists

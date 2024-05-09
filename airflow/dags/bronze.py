@@ -7,6 +7,8 @@ import traceback
 import json
 from typing import List, Optional, Dict
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+import chardet  
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from manager import AWSManager, DuckDBManager, MotherDuckManager
@@ -31,12 +33,13 @@ class DataManager:
 
     def load_and_transform_data(self, raw_bucket, json_key, table_name):
         """
-        Loads and transforms data from a JSON file in S3 into the desired format.
-        
+        Loads and transforms data from a JSON file in S3 into the desired format,
+        with robust error handling for encoding issues and logging.
+
         Args:
             raw_bucket (str): Name of the S3 bucket.
             json_key (str): The key (path) in the S3 bucket where the JSON file is stored.
-            table_name (str): Name of the table to create or insert data into (for reference or logging).
+            table_name (str): Name of the table to create or insert data into.
         """
         s3_file_path = f"{raw_bucket}/{json_key}"
         logger.info(f"Attempting to load and process data from {s3_file_path} into table {table_name}")
@@ -44,18 +47,35 @@ class DataManager:
         try:
             # Fetch the object from S3
             response = self.s3_client.get_object(Bucket=raw_bucket, Key=json_key)
-            json_string = response['Body'].read().decode('utf-8')
+            json_bytes = response['Body'].read()
+
+            # Detect encoding using chardet
+            detected_encoding = chardet.detect(json_bytes)['encoding']
+            logger.info(f"Detected encoding: {detected_encoding}")
+
+            # Decode using detected encoding, fallback to ISO-8859-1 if necessary, replace errors
+            try:
+                json_string = json_bytes.decode(detected_encoding)
+            except UnicodeDecodeError:
+                json_string = json_bytes.decode('iso-8859-1', errors='replace')
+                logger.warning(f"Fallback decoding with replacement for {json_key}")
+
+            # Load data into a JSON object
             data = json.loads(json_string)
 
             # Process the data
             self.process_data(data, table_name)
-
             logger.info(f"Data successfully loaded and processed for table {table_name}")
 
         except json.JSONDecodeError as e:
             logger.error(f"JSON decoding error for {json_key} in {raw_bucket}: {e}")
+            raise e
+        except (BotoCoreError, ClientError) as e:
+            logger.error(f"An AWS error occurred while accessing {s3_file_path}: {e}")
+            raise e
         except Exception as e:
-            logger.error(f"An error occurred while loading data from {s3_file_path}: {e}")
+            logger.error(f"An unexpected error occurred while loading data from {s3_file_path}: {e}")
+            raise e
 
     def process_data(self, data, table_name):
         """

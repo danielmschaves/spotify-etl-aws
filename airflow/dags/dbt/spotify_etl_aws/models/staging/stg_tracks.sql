@@ -1,19 +1,4 @@
--- 2. Tracks Model:
-
--- Purpose: Contains information about each track, including which playlist and album it belongs to, its popularity, and track specifics.
--- Columns:
--- track_id: INT (Primary Key)
--- name: VARCHAR
--- playlist_id: INT (Foreign Key to Playlists)
--- album_id: INT (Foreign Key to Albums)
--- duration_ms: INT
--- popularity: INT
--- explicit: BOOLEAN
--- track_number: INT
--- album_release_date: DATE
--- artist_id: INT (Foreign Key to Artists)
-
-{{ config(materialized='view') }}
+{{ config(materialized='table') }}
 
 with stg_tracks as (
     select
@@ -27,6 +12,6 @@ with stg_tracks as (
         cast(track_number as int) as track_number,
         cast(album_release_date as date) as album_release_date,
         cast(artist_id as varchar) as artist_id
-
     from {{ source('playlist', 'tracks') }}
 )
+select * from stg_tracks
