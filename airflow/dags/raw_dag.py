@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
     catchup=False,
     tags=["spotify_raw_etl"],
 )
-def spotify_etl_dag():
+def silver_ingestion():
     """
     Airflow DAG to ingest data from Spotify API, parse it, and save it both locally and to S3.
     """
@@ -89,4 +89,4 @@ def spotify_etl_dag():
 
 
 # Instantiate the DAG
-dag = spotify_etl_dag()
+dag = silver_ingestion()
