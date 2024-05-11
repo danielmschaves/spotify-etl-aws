@@ -36,7 +36,7 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("airflow.task")
 
 
 @dag(
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
     catchup=False,
     tags=["spotify_raw_etl"],
 )
-def silver_ingestion():
+def raw_ingestion():
     """
     Airflow DAG to ingest data from Spotify API, parse it, and save it both locally and to S3.
     """
@@ -89,4 +89,4 @@ def silver_ingestion():
 
 
 # Instantiate the DAG
-dag = silver_ingestion()
+dag = raw_ingestion()
