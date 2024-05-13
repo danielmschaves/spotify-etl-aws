@@ -96,13 +96,13 @@ class AWSManager:
             self.duckdb_manager.execute_query("LOAD httpfs;")
             #self.duckdb_manager.execute_query(f"SET s3_endpoint='127.0.0.1:9900';")
             #self.duckdb_manager.execute_query(f"CREATE SECRET (TYPE S3, KEY_ID '{aws_access_key}', SECRET '{aws_secret_access_key}', REGION '{aws_region}');")
-            #self.duckdb_manager.execute_query(f"SET s3_region='{aws_region}';")
-            #self.duckdb_manager.execute_query(
-            #    f"SET s3_access_key_id='{aws_access_key}';"
-            #)
-            #self.duckdb_manager.execute_query(
-            #    f"SET s3_secret_access_key='{aws_secret_access_key}';"
-            #)
+            self.duckdb_manager.execute_query(f"SET s3_region='{aws_region}';")
+            self.duckdb_manager.execute_query(
+               f"SET s3_access_key_id='{aws_access_key}';"
+            )
+            self.duckdb_manager.execute_query(
+               f"SET s3_secret_access_key='{aws_secret_access_key}';"
+            )
             #self.duckdb_manager.execute_query("SET s3_url_style = 'path';")
             #self.duckdb_manager.execute_query("SET s3_use_ssl = false;")
             self.duckdb_manager.execute_query("CALL load_aws_credentials();")

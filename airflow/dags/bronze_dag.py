@@ -40,7 +40,6 @@ def bronze_ingestion():
         aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
         aws_region = os.getenv("AWS_REGION")
         local_path = os.getenv("BRONZE_LOCAL_PATH")
-        bronze_s3_path = os.getenv("BRONZE_S3_PATH")
         motherduck_token = os.getenv("MOTHERDUCK_TOKEN")
         local_database = "memory"
         remote_database = "playlist"
@@ -60,13 +59,17 @@ def bronze_ingestion():
             # Initialize database and AWS managers
             logger.info("Initializing database and AWS managers")
             db_manager = DuckDBManager()
-            motherduck_manager = MotherDuckManager(db_manager, motherduck_token)
             aws_manager = AWSManager(db_manager, aws_region, aws_access_key, aws_secret_access_key)
+            motherduck_manager = MotherDuckManager(db_manager, motherduck_token)
             data_manager = DataManager(db_manager, aws_manager, local_path, bronze_s3_path, local_database, remote_database, bronze_schema)
 
             # Start loading and transforming process
             logger.info("Start loading and transforming process")
-            data_manager.load_and_transform_data(raw_bucket, json_key, playlist_table)
+            try:
+                data_manager.load_and_transform_data(raw_bucket, json_key, playlist_table)
+            except Exception as e:
+                logger.error(f"Failed to load and transform data: {e}", exc_info=True)
+                raise
 
             for table_name in table_names:
                 try:
