@@ -9,6 +9,7 @@ default_args = {
     'retries': 2,
     'retry_delay': timedelta(minutes=5),
     'depends_on_past': True,
+    "catchup": False
 }
 
 profile_config = ProfileConfig(profile_name="spotify_etl_aws",
@@ -35,7 +36,7 @@ gold_dag = DbtDag(project_config=project_config,
                     profile_config=profile_config,
                     execution_config=ExecutionConfig(dbt_executable_path=f"{os.environ['AIRFLOW_HOME']}/dbt_venv/bin/dbt",),
                     default_args=default_args,
-                    tags=['gold'],
+                    tags=['gold_ingestion'],
                     dag_id='gold_ingestion')
 
 

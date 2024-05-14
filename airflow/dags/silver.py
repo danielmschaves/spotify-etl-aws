@@ -20,6 +20,7 @@ class DataManager:
     def __init__(
         self,
         db_manager,
+        aws_manager,
         local_database: str,
         remote_database: str,
         silver_schema: str,
@@ -30,6 +31,7 @@ class DataManager:
         bronze_bucket: str,  # Define this properly in the constructor
     ):
         self.db_manager = db_manager
+        self.aws_manager = aws_manager
         self.local_database = local_database
         self.remote_database = remote_database
         self.silver_schema = silver_schema
@@ -38,7 +40,7 @@ class DataManager:
         self.bronze_s3_path = bronze_s3_path
         self.silver_s3_path = silver_s3_path
         self.bronze_bucket = bronze_bucket
-        self.s3_client = boto3.client("s3")
+        self.s3_client = self.aws_manager.s3_client
 
     def create_table_from_bronze(self, tables) -> None:
         """
@@ -226,11 +228,10 @@ if __name__ == "__main__":
     # Create instances of the managers
     db_manager = DuckDBManager()
     motherduck_manager = MotherDuckManager(db_manager, motherduck_token)
-    aws_manager = AWSManager(
-        db_manager, aws_access_key, aws_secret_access_key, aws_region
-    )
+    aws_manager = AWSManager(db_manager, aws_region, aws_access_key, aws_secret_access_key)
     data_manager = DataManager(
         db_manager,
+        aws_manager,
         local_database,
         remote_database,
         silver_schema,

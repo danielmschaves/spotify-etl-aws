@@ -4,6 +4,8 @@ import sys
 from airflow.decorators import dag, task
 from dotenv import load_dotenv
 import logging
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+
 
 # Set the system path to include the custom manager modules directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -19,7 +21,7 @@ aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
 aws_region = os.getenv("AWS_REGION")
 bronze_s3_path = os.getenv("BRONZE_S3_PATH")
 silver_s3_path = os.getenv("SILVER_S3_PATH")
-bronze_path = os.getenv("BRONZE_PATH")
+bronze_bucket = os.getenv("BRONZE_BUCKET")
 local_path = "data/silver/"
 database_name = "playlist"
 silver_schema = "silver"
@@ -53,7 +55,7 @@ def silver_ingestion():
     """
 
     @task
-    def process_data():
+    def silver_ingestion():
         # Initialize the data manager with configuration parameters
         db_manager = DuckDBManager()
         aws_manager = AWSManager(
@@ -64,6 +66,7 @@ def silver_ingestion():
         )
         data_manager = DataManager(
             db_manager,
+            aws_manager,
             local_database,
             remote_database,
             silver_schema,
@@ -71,7 +74,7 @@ def silver_ingestion():
             local_path,
             bronze_s3_path,
             silver_s3_path,
-            bronze_path,
+            bronze_bucket,
         )
         # Data processing steps
         try:
@@ -86,9 +89,16 @@ def silver_ingestion():
             logger.error(f"Error during data processing: {e}")
             raise
 
-    # Schedule the task
-    process_data()
+     # Schedule the task
+    silver_ingestion_task = silver_ingestion()
 
+    # Trigger gold_ingestion DAG after silver_ingestion
+    trigger_gold_ingestion = TriggerDagRunOperator(
+        task_id="trigger_gold_ingestion",
+        trigger_dag_id="gold_ingestion"
+    )
+
+    silver_ingestion_task >> trigger_gold_ingestion
 
 # Instantiate the DAG
 silver_ingestion_dag = silver_ingestion()

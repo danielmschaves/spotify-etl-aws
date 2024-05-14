@@ -1,6 +1,7 @@
 from loguru import logger
 import duckdb
 from typing import Any
+import boto3
 
 class DuckDBManager:
     """
@@ -74,7 +75,27 @@ class AWSManager:
             aws_secret_access_key (str): AWS secret access key.
         """
         self.duckdb_manager = duckdb_manager
+        self.s3_client = self.create_s3_client(aws_region, aws_access_key, aws_secret_access_key)
         self.load_credentials(aws_region, aws_access_key, aws_secret_access_key)
+
+    def create_s3_client(self, aws_region: str, aws_access_key: str, aws_secret_access_key: str):
+        """
+        Creates a boto3 S3 client with the given credentials.
+
+        Args:
+            aws_region (str): AWS region.
+            aws_access_key (str): AWS access key ID.
+            aws_secret_access_key (str): AWS secret access key.
+
+        Returns:
+            boto3.client: Configured boto3 S3 client.
+        """
+        return boto3.client(
+            's3',
+            region_name=aws_region,
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_access_key
+        )
 
     def load_credentials(
         self, aws_region: str, aws_access_key: str, aws_secret_access_key: str

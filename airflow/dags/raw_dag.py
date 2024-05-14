@@ -4,6 +4,7 @@ import sys
 from airflow.decorators import dag, task
 from dotenv import load_dotenv
 import logging
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -43,7 +44,7 @@ logger = logging.getLogger("airflow.task")
     default_args=default_args,
     schedule_interval="@daily",
     catchup=False,
-    tags=["spotify_raw_etl"],
+    tags=["raw_ingestion"],
 )
 def raw_ingestion():
     """
@@ -51,7 +52,7 @@ def raw_ingestion():
     """
 
     @task
-    def fetch_and_save_spotify_data():
+    def raw_ingestion():
         try:
             api_client = SpotifyAPIClient(api_base_url, client_id, client_secret)
             data_parser = DataParser()
@@ -83,10 +84,15 @@ def raw_ingestion():
             logger.error(f"An error occured: {e}")
 
     # Setup task
-    fetch_and_save_spotify_data_task = fetch_and_save_spotify_data()
+    fetch_and_save_spotify_data_task = raw_ingestion()
 
-    fetch_and_save_spotify_data_task
+    # Trigger bronze_ingestion DAG after raw_ingestion
+    trigger_bronze_ingestion = TriggerDagRunOperator(
+        task_id="trigger_bronze_ingestion",
+        trigger_dag_id="bronze_ingestion"
+    )
 
+    fetch_and_save_spotify_data_task >> trigger_bronze_ingestion
 
 # Instantiate the DAG
 dag = raw_ingestion()

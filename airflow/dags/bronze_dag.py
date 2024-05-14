@@ -5,9 +5,10 @@ import logging
 from airflow.decorators import dag, task
 from manager import DuckDBManager, AWSManager, MotherDuckManager
 from bronze import DataManager
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+from dotenv import load_dotenv
 
 # Load environment variables from a .env file if present
-from dotenv import load_dotenv
 load_dotenv()
 
 # Setup logging
@@ -34,7 +35,7 @@ def bronze_ingestion():
     """
 
     @task
-    def bronze_playlist():
+    def bronze_ingestion_task():
         # Configuration
         aws_access_key = os.getenv("AWS_ACCESS_KEY")
         aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -50,18 +51,37 @@ def bronze_ingestion():
         raw_bucket = os.getenv("RAW_BUCKET")
         playlist_table = os.getenv("TABLE_NAME", "playlists")
 
+        # Initialize AWS Manager
+        db_manager = DuckDBManager()
+        aws_manager = AWSManager(db_manager, aws_region, aws_access_key, aws_secret_access_key)
+
+        # Initialize S3 client directly here to test access
+        s3_client = aws_manager.s3_client  # Use the S3 client from AWSManager
+        try:
+            # Simple test operation like listing buckets
+            buckets = s3_client.list_buckets()
+            logger.info(f"Access to S3 confirmed, buckets: {buckets}")
+        except Exception as e:
+            logger.error(f"Failed to access S3: {e}")
+            raise
+        
         try:
             # Ensure local directory exists
             if not os.path.exists(local_path):
                 os.makedirs(local_path)
                 logger.info(f"Created local directory at {local_path}")
 
-            # Initialize database and AWS managers
-            logger.info("Initializing database and AWS managers")
-            db_manager = DuckDBManager()
-            aws_manager = AWSManager(db_manager, aws_region, aws_access_key, aws_secret_access_key)
+            # Initialize other managers
             motherduck_manager = MotherDuckManager(db_manager, motherduck_token)
-            data_manager = DataManager(db_manager, aws_manager, local_path, bronze_s3_path, local_database, remote_database, bronze_schema)
+            data_manager = DataManager(
+                db_manager=db_manager,
+                aws_manager=aws_manager,
+                local_path=local_path,
+                bronze_s3_path=bronze_s3_path,
+                local_database=local_database,
+                remote_database=remote_database,
+                bronze_schema=bronze_schema
+            )
 
             # Start loading and transforming process
             logger.info("Start loading and transforming process")
@@ -86,8 +106,16 @@ def bronze_ingestion():
             logger.error(f"Error during the bronze playlist task: {e}")
             raise
 
-    # Instantiate and schedule the bronze_playlist task
-    bronze_playlist_task = bronze_playlist()
+    # Instantiate and schedule the bronze_ingestion_task
+    bronze_playlist_task = bronze_ingestion_task()
+
+    # Trigger silver_ingestion DAG after bronze_ingestion_task
+    trigger_silver_ingestion = TriggerDagRunOperator(
+        task_id="trigger_silver_ingestion",
+        trigger_dag_id="silver_ingestion"
+    )
+
+    bronze_playlist_task >> trigger_silver_ingestion
 
 # Instantiate the DAG
 bronze_ingestion_dag = bronze_ingestion()

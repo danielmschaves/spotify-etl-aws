@@ -28,7 +28,7 @@ class DataManager:
         self.local_database = local_database
         self.remote_database = remote_database
         self.bronze_schema = bronze_schema
-        self.s3_client = boto3.client('s3')
+        self.s3_client = self.aws_manager.s3_client
         
 
     def load_and_transform_data(self, raw_bucket, json_key, table_name):
