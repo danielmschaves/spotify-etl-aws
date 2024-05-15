@@ -6,9 +6,9 @@ from dotenv import load_dotenv
 import logging
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
-
+# Set the system path to include the custom manager modules directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from raw import SpotifyAPIClient, DataParser, DataSaver
+from raw import SpotifyAPIClient, DataParser, DataSaver, Ingestor
 
 # Load environment variables
 load_dotenv()
@@ -22,9 +22,7 @@ table_path = "data/raw/"
 aws_bucket_name = os.getenv("AWS_BUCKET_NAME")
 aws_access_key = os.getenv("AWS_ACCESS_KEY")
 aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-query = "genre:'hip hop'"  # Search query including genre
-search_type = "artist"  # Search type
-playlist_id = "37i9dQZEVXbMDoHDwVN2tF"  # Spotify Playlist ID
+playlist_ids = ["37i9dQZEVXbMDoHDwVN2tF", "37i9dQZF1DXcBWIGoYBM5M", "37i9dQZF1DWXRqgorJj26U"]
 
 default_args = {
     "owner": "airflow",
@@ -39,12 +37,11 @@ default_args = {
 
 logger = logging.getLogger("airflow.task")
 
-
 @dag(
     default_args=default_args,
     schedule_interval="@daily",
     catchup=False,
-    tags=["raw_ingestion"],
+    tags=["spotify_raw_etl"],
 )
 def raw_ingestion():
     """
@@ -53,6 +50,7 @@ def raw_ingestion():
 
     @task
     def raw_ingestion():
+        file_names = []
         try:
             api_client = SpotifyAPIClient(api_base_url, client_id, client_secret)
             data_parser = DataParser()
@@ -63,33 +61,23 @@ def raw_ingestion():
                 aws_access_key,
                 aws_secret_access_key,
             )
-
-            # Fetch playlist data from Spotify API
-            logger.info("START FETCHING PLAYLIST DATA")
-            fetched_data = api_client.search(
-                query="", search_type="playlist", playlist_id=playlist_id
-            )
-            if fetched_data:
-                # Parse data
-                logger.info("START PARSING DATA")
-                parsed_data = data_parser.parse_json_data(fetched_data)
-                # Define a file name for saving
-                file_name = f"playlist_{playlist_id}.json"
-                # Save data locally and to S3
-                logger.info("START SAVING DATA LOCALLY")
-                data_saver.save_local(parsed_data, file_name)
-                logger.info("START SAVING DATA TO S3")
-                data_saver.save_s3(parsed_data, file_name)
+            ingestor = Ingestor(api_client, data_parser, data_saver)
+            for playlist_id in playlist_ids:
+                ingestor.execute("", "playlist", playlist_id=playlist_id)
+                file_name = f"playlist_{playlist_id}_20.json"
+                file_names.append(file_name)
         except Exception as e:
-            logger.error(f"An error occured: {e}")
+            logger.error(f"An error occurred: {e}")
+        
+        logger.info(f"File names generated: {file_names}")
+        return file_names
 
-    # Setup task
     fetch_and_save_spotify_data_task = raw_ingestion()
 
-    # Trigger bronze_ingestion DAG after raw_ingestion
     trigger_bronze_ingestion = TriggerDagRunOperator(
         task_id="trigger_bronze_ingestion",
-        trigger_dag_id="bronze_ingestion"
+        trigger_dag_id="bronze_ingestion",
+        conf={"file_names": "{{ task_instance.xcom_pull(task_ids='raw_ingestion') }}"},
     )
 
     fetch_and_save_spotify_data_task >> trigger_bronze_ingestion

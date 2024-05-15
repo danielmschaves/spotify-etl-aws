@@ -10,8 +10,14 @@ with stg_tracks as (
         cast(popularity as int) as track_popularity,
         cast(explicit as boolean) as track_explicit,
         cast(track_number as int) as track_number,
-        cast(album_release_date as date) as album_release_date,
+        case
+            when length(album_release_date) = 4 then cast(concat(album_release_date, '-01-01') as date)
+            when length(album_release_date) = 7 then cast(concat(album_release_date, '-01') as date)
+            when length(album_release_date) = 10 then cast(album_release_date as date)
+            else null
+        end as album_release_date,
         cast(artist_id as varchar) as artist_id
     from {{ source('playlist', 'tracks') }}
 )
+
 select * from stg_tracks

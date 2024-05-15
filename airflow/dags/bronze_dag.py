@@ -6,13 +6,13 @@ from airflow.decorators import dag, task
 from manager import DuckDBManager, AWSManager, MotherDuckManager
 from bronze import DataManager
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
-from dotenv import load_dotenv
 
 # Load environment variables from a .env file if present
+from dotenv import load_dotenv
 load_dotenv()
 
 # Setup logging
-logger = logging.getLogger("airflow.task")
+logger = logging.getLogger("airflow.task")  
 
 # Airflow DAG arguments
 default_args = {
@@ -35,7 +35,7 @@ def bronze_ingestion():
     """
 
     @task
-    def bronze_ingestion_task():
+    def bronze_ingestion(file_names: list):
         # Configuration
         aws_access_key = os.getenv("AWS_ACCESS_KEY")
         aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -47,9 +47,10 @@ def bronze_ingestion():
         bronze_schema = "bronze"
         table_names = ["playlists", "tracks", "albums", "artists"]
         bronze_s3_path = os.getenv("BRONZE_S3_PATH")
-        json_key = os.getenv("JSON_KEY")
         raw_bucket = os.getenv("RAW_BUCKET")
         playlist_table = os.getenv("TABLE_NAME", "playlists")
+
+        logger.info(f"Received file names: {file_names}")
 
         # Initialize AWS Manager
         db_manager = DuckDBManager()
@@ -83,36 +84,40 @@ def bronze_ingestion():
                 bronze_schema=bronze_schema
             )
 
-            # Start loading and transforming process
-            logger.info("Start loading and transforming process")
-            try:
-                data_manager.load_and_transform_data(raw_bucket, json_key, playlist_table)
-            except Exception as e:
-                logger.error(f"Failed to load and transform data: {e}", exc_info=True)
-                raise
-
-            for table_name in table_names:
+            # Process each file
+            for json_key in file_names:
+                logger.info(f"Start loading and transforming process for {json_key}")
                 try:
-                    logger.info(f"Saving {table_name} table to local storage")
-                    data_manager.save_to_local(table_name)
-                    logger.info(f"Saving {table_name} table to S3 storage")
-                    data_manager.save_to_s3(table_name)
-                    logger.info(f"Saving {table_name} table to MotherDuck")
-                    data_manager.save_to_md(table_name)
+                    # Log the raw_bucket and json_key values
+                    logger.info(f"Attempting to load data from bucket: {raw_bucket}, key: {json_key}")
+                    data_manager.load_and_transform_data(raw_bucket, json_key, playlist_table)
                 except Exception as e:
-                    logger.error(f"Error in the ingestion process for {table_name}: {e}")
+                    logger.error(f"Failed to load and transform data for {json_key}: {e}", exc_info=True)
                     raise
+
+                for table_name in table_names:
+                    try:
+                        logger.info(f"Saving {table_name} table to local storage")
+                        data_manager.save_to_local(table_name)
+                        logger.info(f"Saving {table_name} table to S3 storage")
+                        data_manager.save_to_s3(table_name)
+                        logger.info(f"Saving {table_name} table to MotherDuck")
+                        data_manager.save_to_md(table_name)
+                    except Exception as e:
+                        logger.error(f"Error in the ingestion process for {table_name}: {e}")
+                        raise
         except Exception as e:
             logger.error(f"Error during the bronze playlist task: {e}")
             raise
 
-    # Instantiate and schedule the bronze_ingestion_task
-    bronze_playlist_task = bronze_ingestion_task()
+    # Instantiate and schedule the bronze_ingestion task
+    bronze_playlist_task = bronze_ingestion(file_names=["playlist_37i9dQZEVXbMDoHDwVN2tF_20.json", "playlist_37i9dQZF1DXcBWIGoYBM5M_20.json", "playlist_37i9dQZF1DWXRqgorJj26U_20.json"])
 
-    # Trigger silver_ingestion DAG after bronze_ingestion_task
+    # Trigger silver_ingestion DAG after bronze_playlist
     trigger_silver_ingestion = TriggerDagRunOperator(
         task_id="trigger_silver_ingestion",
-        trigger_dag_id="silver_ingestion"
+        trigger_dag_id="silver_ingestion",
+        conf={"file_names": "{{ task_instance.xcom_pull(task_ids='bronze_ingestion') }}"},
     )
 
     bronze_playlist_task >> trigger_silver_ingestion
