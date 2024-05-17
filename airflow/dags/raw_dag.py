@@ -8,7 +8,7 @@ from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 # Set the system path to include the custom manager modules directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from raw import SpotifyAPIClient, DataParser, DataSaver, Ingestor
+from include.ingestion.raw import SpotifyAPIClient, DataParser, DataSaver, Ingestor
 
 # Load environment variables
 load_dotenv()

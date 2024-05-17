@@ -15,11 +15,11 @@ load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.spotify.com/v1/")
 TABLE_NAME = os.getenv("TABLE_NAME", "spotify_data")
 TABLE_PATH = "data/raw/"
-AWS_BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 client_id = os.getenv("client_id")
 client_secret = os.getenv("client_secret")
+bucket_name = os.getenv("RAW_BUCKET")
 
 class SpotifyAPIClient:
     """
@@ -214,33 +214,18 @@ class DataSaver:
             logger.error(f"Failed to save data to S3: {e.response['Error']['Message']}")
 
 class Ingestor:
-    """
-    Class for ingesting data from the Spotify API, parsing it, and saving it. This class coordinates the
-    interaction between the API client, data parser, and data saver.
-    """
-
     def __init__(self, api_client, data_parser, data_saver):
-        """
-        Initialize the Ingestor with the API client, data parser, and data saver.
-
-        Args:
-            api_client: An instance of the API client for interacting with the Spotify API.
-            data_parser: An instance of the data parser for parsing the fetched data.
-            data_saver: An instance of the data saver for saving the parsed data.
-        """
         self.api_client = api_client
         self.data_parser = data_parser
         self.data_saver = data_saver
 
-    # Execute the data ingestion process
-    def execute(self, search_query: str, search_type: str, genre: Optional[str] = None, limit: Optional[int] = 20, playlist_id: Optional[str] = None):
+    def execute(self, search_query: str, search_type: str, genre: Optional[str] = None, limit: Optional[int] = 20, playlist_id: Optional[str] = None) -> str:
         logger.info(f"Starting data ingestion for: {search_type}, Query: {search_query}, Genre: {genre}, Limit: {limit}, Playlist ID: {playlist_id}")
         try:
             fetched_data = self.api_client.search(search_query, search_type, genre, limit, playlist_id)
             if fetched_data:
                 parsed_data = self.data_parser.parse_json_data(json.dumps(fetched_data))
                 if parsed_data:
-                    # Sanitize playlist ID for file naming
                     sanitized_playlist_id = playlist_id.replace('?', '_').replace(':', '_') if playlist_id else None
                     file_name = f"playlist_{sanitized_playlist_id}_{limit}.json" if playlist_id else f"{search_query.replace(' ', '_')}_{search_type}_{genre}_{limit}.json"
                     
@@ -248,12 +233,22 @@ class Ingestor:
                     if self.data_saver.bucket_name:
                         self.data_saver.save_s3(parsed_data, file_name)
                     logger.success("Data ingestion process completed successfully.")
+                    return file_name
                 else:
                     logger.warning("Parsing fetched data resulted in no output.")
             else:
                 logger.warning("No data fetched from the Spotify API.")
         except Exception as e:
             logger.error(f"An error occurred during the data ingestion process: {e}")
+        return None
+
+    def execute_multiple(self, playlist_ids: List[str], limit: int = 20) -> List[str]:
+        file_names = []
+        for playlist_id in playlist_ids:
+            file_name = self.execute("", "playlist", playlist_id=playlist_id, limit=limit)
+            if file_name:
+                file_names.append(file_name)
+        return file_names
 
 if __name__ == "__main__":
     # Initialize the API client, data parser, data saver, and ingestor
@@ -261,7 +256,7 @@ if __name__ == "__main__":
     client_secret = os.getenv("client_secret")
     api_client = SpotifyAPIClient(API_BASE_URL, client_id, client_secret)
     data_parser = DataParser()
-    data_saver = DataSaver(TABLE_NAME, TABLE_PATH, AWS_BUCKET_NAME, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
+    data_saver = DataSaver(TABLE_NAME, TABLE_PATH, bucket_name, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
     ingestor = Ingestor(api_client, data_parser, data_saver)
 
     # Example usage
@@ -271,4 +266,3 @@ if __name__ == "__main__":
     limit = int(input("Enter the maximum number of items to fetch (default 20): ") or "20")
     playlist_id = input("Enter a playlist ID (or leave blank for general search): ")
     ingestor.execute(query, type, genre if genre else None, limit, playlist_id if playlist_id else None)
-    

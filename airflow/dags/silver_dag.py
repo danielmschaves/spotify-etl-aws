@@ -9,8 +9,8 @@ from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 # Set the system path to include the custom manager modules directory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from manager import DuckDBManager, AWSManager, MotherDuckManager
-from silver import DataManager
+from include.lib.manager import DuckDBManager, AWSManager, MotherDuckManager
+from include.ingestion.silver import DataManager
 
 load_dotenv()
 logger = logging.getLogger(__name__)

@@ -11,7 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 import chardet  
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from manager import AWSManager, DuckDBManager, MotherDuckManager
+from lib.manager import AWSManager, DuckDBManager, MotherDuckManager
 
 
 class DataManager:

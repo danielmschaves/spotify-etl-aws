@@ -1,1 +1,0 @@
-from ingestion.bronze.bronze import DataManager

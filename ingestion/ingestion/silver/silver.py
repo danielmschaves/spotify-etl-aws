@@ -10,7 +10,7 @@ import traceback
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from manager import DuckDBManager, MotherDuckManager, AWSManager
+from lib.manager import DuckDBManager, MotherDuckManager, AWSManager
 
 
 class DataManager:

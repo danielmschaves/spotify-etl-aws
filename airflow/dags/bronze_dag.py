@@ -3,8 +3,8 @@ import os
 import sys
 import logging
 from airflow.decorators import dag, task
-from manager import DuckDBManager, AWSManager, MotherDuckManager
-from bronze import DataManager
+from include.lib.manager import DuckDBManager, AWSManager, MotherDuckManager
+from include.ingestion.bronze import DataManager
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 # Load environment variables from a .env file if present
