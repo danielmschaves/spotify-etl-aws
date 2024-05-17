@@ -1,6 +1,6 @@
 # Spotify Data ELT Pipeline Project
 
-![pipeline png](https://github.com/danielmschaves/spotify-etl-aws/assets/115505626/b7f2aa2e-72a3-4f6e-9a01-80125d24f1c9)
+![pipeline.png](https://github.com/danielmschaves/spotify-etl-aws/blob/main/ingestion/img/pipeline.png?raw=true)
 
 
 ## About the Data
