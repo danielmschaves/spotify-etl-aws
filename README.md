@@ -1,5 +1,8 @@
 # Spotify Data ELT Pipeline Project
 
+![pipeline png](https://github.com/danielmschaves/spotify-etl-aws/assets/115505626/b7f2aa2e-72a3-4f6e-9a01-80125d24f1c9)
+
+
 ## About the Data
 
 This project focuses on processing data from the Spotify API, specifically targeting playlists, tracks, albums, and artists. The goal is to build a robust ELT (Extract, Load, Transform) pipeline to handle Spotify data efficiently, ensuring the data is ready for analysis and visualization.
