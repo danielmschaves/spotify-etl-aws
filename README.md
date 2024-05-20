@@ -1,11 +1,11 @@
 # Spotify Data ELT Pipeline Project
 
-![pipeline.png](https://github.com/danielmschaves/spotify-etl-aws/blob/main/ingestion/img/pipeline.png?raw=true)
+![spotify.png](https://github.com/danielmschaves/spotify-etl-aws/blob/main/ingestion/img/spotify.png?raw=true)
 
+## About the Project
 
-## About the Data
+This project follows the "poor man's data lake" concept, leveraging DuckDB, Motherduck, dbt, and Airflow to process data from the Spotify API. The primary focus is on playlists, tracks, albums, and artists. The goal is to build a robust ELT (Extract, Load, Transform) pipeline to efficiently handle Spotify data, ensuring it is ready for analysis and visualization. The proposed solution leverages processing and converting data into Parquet files that are then stored in S3 for sequential stage processing.
 
-This project focuses on processing data from the Spotify API, specifically targeting playlists, tracks, albums, and artists. The goal is to build a robust ELT (Extract, Load, Transform) pipeline to handle Spotify data efficiently, ensuring the data is ready for analysis and visualization.
 
 ## Table of Contents
 - [Problem Statement](#problem-statement)
@@ -17,19 +17,48 @@ This project focuses on processing data from the Spotify API, specifically targe
 
 ## Problem Statement
 
-Managing and analyzing large datasets from Spotify requires a structured approach to extract, load, and transform the data. The challenge is to create a seamless pipeline that automates these processes, ensuring data consistency and availability for analysis.
+* ### ***Data***:
+Data obtained using the Spotify API, containing information from popular global playlists, including tracks, albums, and artists.
+
+* ### ***Proposed Solution***:
+A daily scheduled batch extraction of playlist data from Spotify, transformed and made analytics-ready.
 
 ## Data Pipeline Overview
 
 The pipeline orchestrates daily tasks to extract data from the Spotify API, load it into an AWS S3 data lake, transform it for analytical readiness, and prepare it for reporting and visualization.
 
+![pipeline.png](https://github.com/danielmschaves/spotify-etl-aws/blob/main/ingestion/img/pipeline.png?raw=true)
+
 ## Data Pipeline Architecture
+
+### Raw Stage
+- **Purpose**: Store raw data extracted from the Spotify API.
+- **Data Format**: JSON.
+- **Storage**: AWS S3 (Raw Bucket).
+
+### Bronze Stage
+- **Purpose**: Initial transformation of raw data to a more structured format.
+- **Data Format**: Parquet.
+- **Storage**: AWS S3 (Bronze Bucket).
+- **Tool**: DuckDB.
+
+### Silver Stage
+- **Purpose**: Further transformation of the data for analysis.
+- **Data Format**: Parquet.
+- **Storage**: AWS S3 (Silver Bucket).
+- **Tool**: DuckDB.
+
+### Gold Stage
+- **Purpose**: Final transformation to an analytics-ready state.
+- **Data Format**: Parquet.
+- **Storage**: AWS S3 (Gold Bucket).
+- **Tool**: dbt.
 
 ### Infrastructure Provisioning with Terraform
 
 The infrastructure is provisioned using Terraform, ensuring consistent and reproducible setup:
 
-- **Data Lake**: An S3 bucket is configured to store both raw and transformed data, organized to maintain clarity between raw data and data ready for analysis.
+- **S3 Bucket**: S3 buckets are configured to store both raw and transformed data, organized to maintain clarity between raw data and data ready for analysis.
 
 ### Pipeline Orchestration with Astronomer and Airflow
 
@@ -75,4 +104,4 @@ Daily orchestrated tasks include:
 
 ## Conclusion
 
-This project demonstrates the creation of an efficient and automated ELT pipeline using a combination of modern data engineering tools and techniques. The pipeline ensures data from the Spotify API is systematically extracted, transformed, and loaded into an analytical-ready state, facilitating comprehensive reporting and visualization. Future enhancements will focus on integrating more data sources, incorporating machine learning models, and moving towards real-time data processing.
+This project demonstrates the creation of an efficient and automated ELT pipeline using a combination of modern data engineering tools and techniques. The pipeline ensures data from the Spotify API is systematically extracted, transformed, and loaded into an analytical-ready state, facilitating comprehensive reporting and visualization.    
