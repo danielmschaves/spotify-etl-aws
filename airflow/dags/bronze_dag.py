@@ -55,16 +55,6 @@ def bronze_ingestion():
         # Initialize AWS Manager
         db_manager = DuckDBManager()
         aws_manager = AWSManager(db_manager, aws_region, aws_access_key, aws_secret_access_key)
-
-        # Initialize S3 client directly here to test access
-        s3_client = aws_manager.s3_client  # Use the S3 client from AWSManager
-        try:
-            # Simple test operation like listing buckets
-            buckets = s3_client.list_buckets()
-            logger.info(f"Access to S3 confirmed, buckets: {buckets}")
-        except Exception as e:
-            logger.error(f"Failed to access S3: {e}")
-            raise
         
         try:
             # Ensure local directory exists
