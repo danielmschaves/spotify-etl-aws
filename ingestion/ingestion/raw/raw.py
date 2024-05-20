@@ -12,11 +12,11 @@ from requests.auth import HTTPBasicAuth
 load_dotenv()
 
 # Environmental configuration
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.spotify.com/v1/")
-TABLE_NAME = os.getenv("TABLE_NAME", "spotify_data")
-TABLE_PATH = "data/raw/"
-AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+api_base_url = os.getenv("API_BASE_URL", "https://api.spotify.com/v1/")
+table_name = os.getenv("TABLE_NAME", "spotify_data")
+table_path = "data/raw/"
+aws_access_key = os.getenv("AWS_ACCESS_KEY")
+aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
 client_id = os.getenv("client_id")
 client_secret = os.getenv("client_secret")
 bucket_name = os.getenv("RAW_BUCKET")
@@ -254,9 +254,9 @@ if __name__ == "__main__":
     # Initialize the API client, data parser, data saver, and ingestor
     client_id = os.getenv("client_id")
     client_secret = os.getenv("client_secret")
-    api_client = SpotifyAPIClient(API_BASE_URL, client_id, client_secret)
+    api_client = SpotifyAPIClient(api_base_url, client_id, client_secret)
     data_parser = DataParser()
-    data_saver = DataSaver(TABLE_NAME, TABLE_PATH, bucket_name, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
+    data_saver = DataSaver(table_name, table_path, bucket_name, aws_access_key, aws_secret_access_key)
     ingestor = Ingestor(api_client, data_parser, data_saver)
 
     # Example usage
