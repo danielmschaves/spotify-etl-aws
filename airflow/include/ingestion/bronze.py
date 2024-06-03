@@ -6,7 +6,6 @@ from pydantic import ValidationError
 import traceback
 import json
 from typing import List, Optional, Dict
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 import chardet  
 
@@ -80,6 +79,10 @@ class DataManager:
     def process_data(self, data, table_name):
         """
         Processes data based on type, could be list of items or single item.
+
+        Args:
+            data (dict or list): The data to process.
+            table_name (str): The name of the table to insert data into.
         """
         if isinstance(data, dict):  # Handling single playlist
             self.handle_playlist(data, table_name)
@@ -90,6 +93,10 @@ class DataManager:
     def handle_playlist(self, playlist_data, table_name):
         """
         Handles the insertion of playlist data into the database.
+
+        Args:
+            playlist_data (dict): The playlist data to insert.
+            table_name (str): The name of the table to insert data into.
         """
         try:
             playlist_info = {
@@ -114,6 +121,10 @@ class DataManager:
     def handle_tracks(self, tracks_data, playlist_id):
         """
         Handles the insertion of track data related to a specific playlist into the database.
+
+        Args:
+            tracks_data (dict): The track data to insert.
+            playlist_id (str): The ID of the playlist the tracks belong to.
         """
         try:
             track_table_name = "tracks"
@@ -150,6 +161,10 @@ class DataManager:
     def handle_album(self, album_data, track_id):
         """
         Handles the insertion of album data related to a specific track.
+
+        Args:
+            album_data (dict): The album data to insert.
+            track_id (str): The ID of the track the album is related to.
         """
         album_info = {
             "album_id": album_data["id"],
@@ -163,6 +178,10 @@ class DataManager:
     def handle_artists(self, artists_data, track_id):
         """
         Handles the insertion of artist data related to a specific track.
+
+        Args:
+            artists_data (list): The artist data to insert.
+            track_id (str): The ID of the track the artists are related to.
         """
         for artist in artists_data:
             artist_info = {
@@ -175,6 +194,10 @@ class DataManager:
     def insert_data(self, table_name, data):
         """
         Generic method to insert data into the specified table.
+
+        Args:
+            table_name (str): The name of the table to insert data into.
+            data (dict): The data to insert.
         """
         field_definitions = ", ".join([f"{k} TEXT" for k in data.keys()])
         create_table_query = (
@@ -190,6 +213,9 @@ class DataManager:
     def save_to_local(self, table_name) -> None:
         """
         Saves data to local disk in parquet format.
+
+        Args:
+            table_name (str): The name of the table to save.
         """
         try:
             logger.info(f"Saving {table_name} table as parquet format locally")

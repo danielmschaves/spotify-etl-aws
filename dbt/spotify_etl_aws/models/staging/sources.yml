@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: playlist
+    config:
+      aws_access_key_id: "{{ env_var('AWS_ACCESS_KEY') }}"
+      aws_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+    meta:
+      external_location: "read_parquet('s3://data-lake-silver-stage-spotify-197398273774/{name}.parquet')"  
+    tables:
+      - name: playlists
+        identifier: playlists
+        file_format: parquet
+
+      - name: tracks
+        identifier: tracks
+        file_format: parquet
+
+      - name: artists
+        identifier: artists
+        file_format: parquet
+
+      - name: albums
+        identifier: albums
+        file_format: parquet

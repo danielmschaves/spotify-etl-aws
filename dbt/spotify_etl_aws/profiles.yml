@@ -1,0 +1,23 @@
+
+spotify_etl_aws:
+  outputs:
+    dev:
+      type: duckdb
+      schema: gold
+      path: temp/dbt.duckdb
+      extensions:
+        - httpfs
+        - parquet
+      settings:
+        s3_region: "{{ env_var('AWS_REGION') }}"
+        s3_access_key_id: "{{ env_var('AWS_ACCESS_KEY') }}"
+        s3_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+    prod:
+      type: duckdb
+      schema: gold
+      path: "md:playlist"
+      settings:
+        s3_region: "{{ env_var('AWS_REGION') }}"
+        s3_access_key_id: "{{ env_var('AWS_ACCESS_KEY') }}"
+        s3_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+  target: dev

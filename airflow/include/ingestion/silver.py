@@ -1,11 +1,7 @@
-# use duck db to load data from parquet files to a more structured format
-# methods: 1) create_table_from_bronze, 2) save_to_s3, 3) save_to_local, 4) save_to_md
-
 import os
 import sys
 from dotenv import load_dotenv
 from loguru import logger
-import boto3
 import traceback
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -15,7 +11,20 @@ from include.lib.manager import DuckDBManager, MotherDuckManager, AWSManager
 
 class DataManager:
     """
-    Manages data operations
+    Manages data operations for loading, transforming, and saving data from parquet files in S3 to a structured format using DuckDB.
+    
+    Attributes:
+        db_manager: Instance of DuckDBManager for executing DuckDB queries.
+        aws_manager: Instance of AWSManager for interacting with AWS services.
+        local_database (str): Name of the local DuckDB database.
+        remote_database (str): Name of the remote database (e.g., for MotherDuck).
+        silver_schema (str): Schema for silver-level data.
+        database_name (str): Name of the database.
+        local_path (str): Local path for saving data.
+        bronze_s3_path (str): S3 path for bronze-level data.
+        silver_s3_path (str): S3 path for silver-level data.
+        bronze_bucket (str): Name of the S3 bucket for bronze-level data.
+        s3_client: AWS S3 client for interacting with S3.
     """
     def __init__(
         self,
@@ -30,6 +39,21 @@ class DataManager:
         silver_s3_path: str,
         bronze_bucket: str,  # Define this properly in the constructor
     ):
+        """
+        Initializes the DataManager with the required managers and paths.
+
+        Args:
+            db_manager: Instance of DuckDBManager for executing DuckDB queries.
+            aws_manager: Instance of AWSManager for interacting with AWS services.
+            local_database (str): Name of the local DuckDB database.
+            remote_database (str): Name of the remote database.
+            silver_schema (str): Schema for silver-level data.
+            database_name (str): Name of the database.
+            local_path (str): Local path for saving data.
+            bronze_s3_path (str): S3 path for bronze-level data.
+            silver_s3_path (str): S3 path for silver-level data.
+            bronze_bucket (str): Name of the S3 bucket for bronze-level data.
+        """
         self.db_manager = db_manager
         self.aws_manager = aws_manager
         self.local_database = local_database
@@ -45,6 +69,9 @@ class DataManager:
     def create_table_from_bronze(self, tables) -> None:
         """
         Creates tables in DuckDB from the bronze tables in S3, with specific transformations and cleanups.
+
+        Args:
+            tables (list): List of table names to create.
         """
         tables = {
             "playlists": {"columns": "id, name, description, owner_id, followers, public"},
@@ -74,6 +101,9 @@ class DataManager:
     def save_to_local(self, tables) -> None:
         """
         Saves the specified tables to local disk in parquet format.
+
+        Args:
+            tables (list): List of table names to save locally.
         """
         for table in tables:
             try:
@@ -96,31 +126,21 @@ class DataManager:
     def save_to_s3(self, tables) -> None:
         """
         Uploads the specified tables from local disk to Amazon S3 in parquet format.
+
+        Args:
+            tables (list): List of table names to upload to S3.
         """
         for table in tables:
             local_file_path = f"{self.local_path}{table}.parquet"
             s3_file_path = f"{self.silver_s3_path}/{table}.parquet"
             logger.debug(f"Uploading table {table} to S3 at {s3_file_path}")
-            # try:
-            #     query = f"""
-            #         COPY (
-            #             SELECT * 
-            #             FROM {self.local_database}.{table}
-            #         ) 
-            #         TO '{s3_file_path}' (FORMAT 'parquet')
-            #     """
-            #     self.db_manager.execute_query(query)
-            #     logger.success(f"Table {table} saved to S3 at {s3_file_path}")
-            # except Exception as e:
-            #     logger.error(f"Error uploading table {table} to S3: {e}")
-            #     raise e
 
-            bucket = s3_file_path.split('/')[2]  # Assuming s3_file_path is in the format 's3://bucket/key'
+            bucket = s3_file_path.split('/')[2] 
             key = '/'.join(s3_file_path.split('/')[3:])
 
             if not os.path.exists(local_file_path):
                 logger.error(f"Local file {local_file_path} does not exist.")
-                continue  # Skip to the next table if the file does not exist
+                continue  
 
             try:
                 with open(local_file_path, "rb") as data:
@@ -132,6 +152,9 @@ class DataManager:
     def save_to_md(self, tables) -> None:
         """
         Saves the specified tables to MotherDuck for further use.
+
+        Args:
+            tables (list): List of table names to save to MotherDuck.
         """
         for table in tables:
             try:
@@ -148,29 +171,16 @@ class DataManager:
             except Exception as e:
                 logger.error(f"Error saving table {table} to MotherDuck: {traceback.format_exc()}")
 
-    # def save_to_s3(self, tables) -> None:
-    #     """
-    #     Saves the specified tables to Amazon S3 in parquet format.
-    #     """
-    #     for table in tables:
-    #         try:
-    #             logger.info(f"Saving table {table} to S3 as parquet.")
-    #             query = f"""
-    #                 COPY (
-    #                     SELECT * FROM playlist.bronze.{table}
-    #                 )
-    #                 TO '{self.silver_s3_path}{table}.parquet'
-    #                 WITH (FORMAT 'parquet')
-    #             """
-    #             self.db_manager.execute_query(query)
-    #             logger.success(f"Table {table} saved to S3 as parquet")
-    #         except Exception as e:
-    #             logger.error(f"Error saving table {table} to S3: {e}")
-
 
 class Ingestor:
     """
     Orchestrates the data ingestion process.
+
+    Attributes:
+        db_manager: Instance of DuckDBManager for executing DuckDB queries.
+        motherduck_manager: Instance of MotherDuckManager for interacting with MotherDuck.
+        aws_manager: Instance of AWSManager for interacting with AWS services.
+        data_manager: Instance of DataManager for handling data operations.
     """
 
     def __init__(
@@ -182,6 +192,12 @@ class Ingestor:
     ):
         """
         Initializes Ingestor with necessary managers.
+
+        Args:
+            db_manager: Instance of DuckDBManager for executing DuckDB queries.
+            motherduck_manager: Instance of MotherDuckManager for interacting with MotherDuck.
+            aws_manager: Instance of AWSManager for interacting with AWS services.
+            data_manager: Instance of DataManager for handling data operations.
         """
         self.db_manager = db_manager
         self.motherduck_manager = motherduck_manager

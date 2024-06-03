@@ -12,11 +12,11 @@ from requests.auth import HTTPBasicAuth
 load_dotenv()
 
 # Environmental configuration
-api_base_url = os.getenv("API_BASE_URL", "https://api.spotify.com/v1/")
-table_name = os.getenv("TABLE_NAME", "spotify_data")
-table_path = "data/raw/"
-aws_access_key = os.getenv("AWS_ACCESS_KEY")
-aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.spotify.com/v1/")
+TABLE_NAME = os.getenv("TABLE_NAME", "spotify_data")
+TABLE_PATH = "data/raw/"
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 client_id = os.getenv("client_id")
 client_secret = os.getenv("client_secret")
 bucket_name = os.getenv("RAW_BUCKET")
@@ -24,9 +24,24 @@ bucket_name = os.getenv("RAW_BUCKET")
 class SpotifyAPIClient:
     """
     Class for interacting with the Spotify API, providing methods to search for different entities.
+    
+    Attributes:
+        base_url (str): Base URL for the Spotify API.
+        client_id (str): Spotify API client ID.
+        client_secret (str): Spotify API client secret.
+        session (requests.Session): HTTP session for making requests.
+        access_token (str): Bearer token for API authentication.
     """
 
     def __init__(self, base_url: str, client_id: str, client_secret: str) -> None:
+        """
+        Initialize the Spotify API client.
+
+        Args:
+            base_url (str): Base URL for the Spotify API.
+            client_id (str): Spotify API client ID.
+            client_secret (str): Spotify API client secret.
+        """ 
         self.base_url = base_url
         self.client_id = client_id
         self.client_secret = client_secret
@@ -34,6 +49,12 @@ class SpotifyAPIClient:
         self.access_token = self.refresh_access_token()
 
     def refresh_access_token(self) -> str:
+        """
+        Retrieves a new access token from the Spotify API.
+
+        Returns:
+            str: Access token.
+        """
         url = "https://accounts.spotify.com/api/token"
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = {"grant_type": "client_credentials"}
@@ -140,9 +161,15 @@ class DataParser:
 class DataSaver:
     """
     Class for saving data locally or to an AWS S3 bucket, ensuring data integrity and handling errors gracefully.
-    """
-
+    
+    Attributes:
+        table_name (str): Name of the table.
+        table_path (str): Local path where the data files will be stored.
+        bucket_name (Optional[str]): Name of the AWS S3 bucket.
+        s3_client (Optional[boto3.client]): Boto3 S3 client.
+    """    
     def __init__(
+        
         self,
         table_name: str,
         table_path: str,
@@ -214,12 +241,41 @@ class DataSaver:
             logger.error(f"Failed to save data to S3: {e.response['Error']['Message']}")
 
 class Ingestor:
+    """
+    Orchestrates the data fetching, parsing, and saving processes.
+
+    Attributes:
+        api_client (SpotifyAPIClient): Client for interacting with Spotify API.
+        data_parser (DataParser): Parser for JSON data.
+        data_saver (DataSaver): Saver for local and S3 storage.
+    """
     def __init__(self, api_client, data_parser, data_saver):
+        """
+        Initialize the Ingestor with the required components.
+
+        Args:
+            api_client (SpotifyAPIClient): Client for interacting with Spotify API.
+            data_parser (DataParser): Parser for JSON data.
+            data_saver (DataSaver): Saver for local and S3 storage.
+        """
         self.api_client = api_client
         self.data_parser = data_parser
         self.data_saver = data_saver
 
     def execute(self, search_query: str, search_type: str, genre: Optional[str] = None, limit: Optional[int] = 20, playlist_id: Optional[str] = None) -> str:
+        """
+        Executes the data ingestion process: fetches data from Spotify, parses it, and saves it locally and/or to S3.
+
+        Args:
+            search_query (str): The search query.
+            search_type (str): Type of search (e.g., 'track', 'artist', 'playlist').
+            genre (Optional[str]): Genre to filter the search results.
+            limit (Optional[int]): Limit the number of items to return.
+            playlist_id (Optional[str]): Specific ID of the playlist to fetch directly.
+
+        Returns:
+            str: The name of the file saved, or None if the process fails.
+        """
         logger.info(f"Starting data ingestion for: {search_type}, Query: {search_query}, Genre: {genre}, Limit: {limit}, Playlist ID: {playlist_id}")
         try:
             fetched_data = self.api_client.search(search_query, search_type, genre, limit, playlist_id)
@@ -243,6 +299,16 @@ class Ingestor:
         return None
 
     def execute_multiple(self, playlist_ids: List[str], limit: int = 20) -> List[str]:
+        """
+        Executes the ingestion process for multiple playlists, storing the results in a list.
+
+        Args:
+            playlist_ids (List[str]): List of playlist IDs to fetch.
+            limit (int): Limit the number of items to return for each playlist.
+
+        Returns:
+            List[str]: List of file names saved, or an empty list if the process fails.
+        """
         file_names = []
         for playlist_id in playlist_ids:
             file_name = self.execute("", "playlist", playlist_id=playlist_id, limit=limit)
@@ -254,9 +320,9 @@ if __name__ == "__main__":
     # Initialize the API client, data parser, data saver, and ingestor
     client_id = os.getenv("client_id")
     client_secret = os.getenv("client_secret")
-    api_client = SpotifyAPIClient(api_base_url, client_id, client_secret)
+    api_client = SpotifyAPIClient(API_BASE_URL, client_id, client_secret)
     data_parser = DataParser()
-    data_saver = DataSaver(table_name, table_path, bucket_name, aws_access_key, aws_secret_access_key)
+    data_saver = DataSaver(TABLE_NAME, TABLE_PATH, bucket_name, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY)
     ingestor = Ingestor(api_client, data_parser, data_saver)
 
     # Example usage
