@@ -8,7 +8,7 @@ default_args = {
     'start_date': datetime(2024, 5, 1),
     'retries': 2,
     'retry_delay': timedelta(minutes=5),
-    'depends_on_past': True,
+    'depends_on_past': False,
     "catchup": False
 }
 
