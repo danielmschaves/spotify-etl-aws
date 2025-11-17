@@ -1,3 +1,5 @@
+"""Silver layer data ingestion DAG."""
+
 from datetime import datetime, timedelta
 import os
 import sys
@@ -6,11 +8,11 @@ from dotenv import load_dotenv
 import logging
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
+# Add src to Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-# Set the system path to include the custom manager modules directory
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from include.lib.manager import DuckDBManager, AWSManager, MotherDuckManager
-from include.ingestion.silver import DataManager
+from spotify_etl.managers import DuckDBManager, AWSManager, MotherDuckManager
+from spotify_etl.ingestion.silver import DataManager, Ingestor
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -50,20 +52,14 @@ default_args = {
     tags=["silver_ingestion"],
 )
 def silver_ingestion():
-    """
-    Airflow DAG to load data from Parquet files into DuckDB, process it, and save it to various storage.
-    """
+    """Airflow DAG to load data from Parquet files into DuckDB, process it, and save it to various storage."""
 
     @task
-    def silver_ingestion():
+    def silver_ingestion_task():
         # Initialize the data manager with configuration parameters
         db_manager = DuckDBManager()
-        aws_manager = AWSManager(
-            db_manager, aws_region, aws_access_key, aws_secret_access_key
-        )
-        motherduck_manager = MotherDuckManager(
-            db_manager, os.getenv("MOTHERDUCK_TOKEN")
-        )
+        aws_manager = AWSManager(db_manager, aws_region, aws_access_key, aws_secret_access_key)
+        motherduck_manager = MotherDuckManager(db_manager, os.getenv("MOTHERDUCK_TOKEN"))
         data_manager = DataManager(
             db_manager,
             aws_manager,
@@ -88,17 +84,21 @@ def silver_ingestion():
         except Exception as e:
             logger.error(f"Error during data processing: {e}")
             raise
+        finally:
+            if db_manager:
+                db_manager.close()
 
-     # Schedule the task
-    silver_ingestion_task = silver_ingestion()
+    # Schedule the task
+    silver_ingestion_task_instance = silver_ingestion_task()
 
     # Trigger gold_ingestion DAG after silver_ingestion
     trigger_gold_ingestion = TriggerDagRunOperator(
         task_id="trigger_gold_ingestion",
-        trigger_dag_id="gold_ingestion"
+        trigger_dag_id="gold_ingestion",
     )
 
-    silver_ingestion_task >> trigger_gold_ingestion
+    silver_ingestion_task_instance >> trigger_gold_ingestion
+
 
 # Instantiate the DAG
 silver_ingestion_dag = silver_ingestion()

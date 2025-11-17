@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install dbt and dependencies
+RUN pip install --no-cache-dir \
+    dbt-core==1.8.0 \
+    dbt-duckdb==1.8.0 \
+    duckdb==1.0.0
+
+# Copy dbt project
+COPY dbt/spotify_etl_aws/ /app/dbt/spotify_etl_aws/
+
+WORKDIR /app/dbt/spotify_etl_aws
+
+# Default command
+CMD ["dbt", "debug"]
+

@@ -32,10 +32,13 @@ clean-targets:         # directories to be removed by `dbt clean`
 # files using the `{{ config(...) }}` macro.
 models:
   spotify_etl_aws:
-    # Config indicated by + and applies to all files under models/example/
+    # Staging models - raw data cleaning and basic transformations
     staging:
       +materialized: table
-    # Applies to all files under models/core/
-    core:
+    # Intermediate models - business logic and reusable transformations
+    intermediate:
+      +materialized: view
+    # Marts - final analytics-ready tables (dimensions and facts)
+    marts:
       +materialized: table
       +post-hook: "{{ export_playlist_tracks_data('gold', 'fact_playlist_tracks') }}"

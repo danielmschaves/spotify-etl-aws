@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files
+COPY pyproject.toml poetry.lock* ./
+
+# Install Poetry
+RUN pip install --no-cache-dir poetry && \
+    poetry config virtualenvs.create false
+
+# Install dependencies
+RUN poetry install --no-dev --no-interaction --no-ansi
+
+# Copy source code
+COPY src/ /app/src/
+COPY data/ /app/data/
+
+# Set Python path
+ENV PYTHONPATH=/app/src
+
+# Default command
+CMD ["python", "-m", "src.spotify_etl.ingestion.raw.ingestor"]
+

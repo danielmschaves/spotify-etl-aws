@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # Airflow services
+  airflow-webserver:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: airflow-webserver
+    command: webserver
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=''
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
+    volumes:
+      - ./airflow/dags:/usr/local/airflow/dags
+      - ./airflow/include:/usr/local/airflow/include
+      - ./airflow/plugins:/usr/local/airflow/plugins
+      - ./airflow/data:/usr/local/airflow/data
+      - ./dbt/spotify_etl_aws:/usr/local/airflow/dags/dbt/spotify_etl_aws
+      - ./src:/usr/local/airflow/src
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - spotify-etl-network
+
+  airflow-scheduler:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: airflow-scheduler
+    command: scheduler
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=''
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+    volumes:
+      - ./airflow/dags:/usr/local/airflow/dags
+      - ./airflow/include:/usr/local/airflow/include
+      - ./airflow/plugins:/usr/local/airflow/plugins
+      - ./airflow/data:/usr/local/airflow/data
+      - ./dbt/spotify_etl_aws:/usr/local/airflow/dags/dbt/spotify_etl_aws
+      - ./src:/usr/local/airflow/src
+    depends_on:
+      - postgres
+      - airflow-webserver
+    networks:
+      - spotify-etl-network
+
+  # PostgreSQL for Airflow metadata
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - spotify-etl-network
+
+  # Standalone ingestion service (optional)
+  ingestion:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingestion
+    container_name: ingestion-service
+    environment:
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    networks:
+      - spotify-etl-network
+    profiles:
+      - standalone
+
+  # Standalone dbt service (optional)
+  dbt:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dbt
+    container_name: dbt-service
+    working_dir: /app/dbt/spotify_etl_aws
+    volumes:
+      - ./dbt/spotify_etl_aws:/app/dbt/spotify_etl_aws
+      - ./data:/app/data
+    networks:
+      - spotify-etl-network
+    profiles:
+      - standalone
+
+networks:
+  spotify-etl-network:
+    driver: bridge
+
+volumes:
+  postgres-db-volume:
+
